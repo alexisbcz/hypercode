@@ -1,0 +1,37 @@
+name: Hypercode
+options:
+  bundleIdPrefix: dev.alexis
+  deploymentTarget:
+    macOS: "26.0"
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: 1
+packages:
+  Markdown:
+    url: https://github.com/swiftlang/swift-markdown
+    from: 0.9.0
+  HighlightSwift:
+    url: https://github.com/appstefan/HighlightSwift
+    from: 1.1.0
+targets:
+  Hypercode:
+    type: application
+    platform: macOS
+    sources:
+      - path: Hypercode
+    dependencies:
+      - package: Markdown
+      - package: HighlightSwift
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: dev.alexis.Hypercode
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_CFBundleDisplayName: Hypercode
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.developer-tools
+        ENABLE_APP_SANDBOX: NO
+        CODE_SIGN_IDENTITY: "-"
+        SWIFT_DEFAULT_ACTOR_ISOLATION: MainActor
+        SWIFT_APPROACHABLE_CONCURRENCY: YES
