@@ -28,14 +28,15 @@ private struct BlockChildren: View {
 
 private struct Block: View {
     let markup: any Markup
+    @Environment(\.projectRoot) private var root
 
     var body: some View {
         if let paragraph = markup as? Paragraph {
-            SwiftUI.Text(Inline.render(paragraph))
+            SwiftUI.Text(Inline.render(paragraph, root: root))
                 .lineSpacing(3)
                 .fixedSize(horizontal: false, vertical: true)
         } else if let heading = markup as? Heading {
-            SwiftUI.Text(Inline.render(heading))
+            SwiftUI.Text(Inline.render(heading, root: root))
                 .font(Self.font(for: heading.level))
                 .padding(.top, heading.level <= 2 ? 8 : 4)
         } else if let code = markup as? CodeBlock {
@@ -108,6 +109,7 @@ private struct ListView: View {
 }
 
 private struct TableView: View {
+    @Environment(\.projectRoot) private var root
     let table: Markdown.Table
 
     var body: some View {
@@ -137,7 +139,7 @@ private struct TableView: View {
     }
 
     private func cellView(_ cell: Markdown.Table.Cell, alignment: Markdown.Table.ColumnAlignment?) -> some View {
-        SwiftUI.Text(Inline.render(cell))
+        SwiftUI.Text(Inline.render(cell, root: root))
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
             .fixedSize(horizontal: false, vertical: true)
@@ -148,30 +150,31 @@ private struct TableView: View {
 
 /// Inline Markdown → AttributedString, so text wraps and selects as one run.
 private enum Inline {
-    static func render(_ markup: any Markup) -> AttributedString {
-        markup.children.reduce(into: AttributedString()) { $0 += render(inline: $1) }
+    static func render(_ markup: any Markup, root: URL?) -> AttributedString {
+        markup.children.reduce(into: AttributedString()) { $0 += render(inline: $1, root: root) }
     }
 
-    private static func render(inline markup: any Markup) -> AttributedString {
+    private static func render(inline markup: any Markup, root: URL?) -> AttributedString {
         switch markup {
         case let text as Markdown.Text:
-            return AttributedString(text.string)
+            return Links.linkified(text.string)
         case let code as InlineCode:
             var s = AttributedString(code.code)
             s.font = .body.monospaced()
             s.backgroundColor = Color.secondary.opacity(0.12)
+            s.link = Links.fileReference(inCode: code.code, root: root)
             return s
         case is Strong:
-            return styled(markup, .stronglyEmphasized)
+            return styled(markup, .stronglyEmphasized, root: root)
         case is Emphasis:
-            return styled(markup, .emphasized)
+            return styled(markup, .emphasized, root: root)
         case is Strikethrough:
-            var s = render(markup)
+            var s = render(markup, root: root)
             s.strikethroughStyle = .single
             return s
         case let link as Markdown.Link:
-            var s = render(link)
-            if let destination = link.destination, let url = URL(string: destination) { s.link = url }
+            var s = render(link, root: root)
+            if let url = link.destination.flatMap(Links.destination) { s.link = url }
             return s
         case let image as Markdown.Image:
             return AttributedString(image.plainText)
@@ -182,12 +185,12 @@ private enum Inline {
         case let html as InlineHTML:
             return AttributedString(html.rawHTML)
         default:
-            return render(markup)
+            return render(markup, root: root)
         }
     }
 
-    private static func styled(_ markup: any Markup, _ intent: InlinePresentationIntent) -> AttributedString {
-        var s = render(markup)
+    private static func styled(_ markup: any Markup, _ intent: InlinePresentationIntent, root: URL?) -> AttributedString {
+        var s = render(markup, root: root)
         for run in s.runs {
             let current = s[run.range].inlinePresentationIntent ?? []
             s[run.range].inlinePresentationIntent = current.union(intent)
@@ -246,7 +249,9 @@ struct CodeBlockView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(.quinary, in: .rect(cornerRadius: 10))
         .task(id: "\(colorScheme)\(code)") {
+            // Plain output (a tool's stdout, say) gets its web addresses linked instead of colors.
             highlighted = await Highlighter.highlight(code, language: language, dark: colorScheme == .dark)
+                ?? (language == nil ? Links.linkified(code) : nil)
         }
     }
 }

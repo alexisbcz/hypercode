@@ -23,6 +23,8 @@ struct SessionView: View {
             .frame(maxWidth: .infinity)
         }
         .defaultScrollAnchor(.bottom)
+        .environment(\.projectRoot, session.project.url)
+        .environment(\.openURL, OpenURLAction { Links.open($0, root: session.project.url) })
         .safeAreaInset(edge: .bottom) {
             VStack(spacing: 0) {
                 if !session.queue.isEmpty {

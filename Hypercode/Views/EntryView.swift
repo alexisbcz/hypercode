@@ -26,7 +26,7 @@ struct EntryView: View {
                     }
                 }
                 if !entry.text.isEmpty {
-                    Text(entry.text)
+                    Text(Links.linkified(entry.text))
                         .textSelection(.enabled)
                         .padding(.horizontal, 14)
                         .padding(.vertical, 10)
