@@ -29,6 +29,9 @@ private struct GeneralSettings: View {
     @AppStorage(Pref.showTools) private var showTools = true
     @AppStorage(Pref.expandTools) private var expandTools = false
     @AppStorage(Pref.dictationLocale) private var dictationLocale = ""
+    @AppStorage(Pref.speechVoice) private var speechVoice = ""
+    @AppStorage(Pref.speechRate) private var speechRate = 0.5
+    @AppStorage(Pref.speechAutoRead) private var speechAutoRead = false
 
     var body: some View {
         @Bindable var store = store
@@ -76,6 +79,33 @@ private struct GeneralSettings: View {
                 Text("Press ⇧⌘D in the composer to dictate. Languages your Mac supports offline are recognized on-device.")
                     .foregroundStyle(.secondary)
             }
+
+            Section {
+                Toggle("Read replies aloud when they finish", isOn: $speechAutoRead)
+                Picker("Voice", selection: $speechVoice) {
+                    Text("Best for Each Reply's Language").tag("")
+                    Divider()
+                    ForEach(Speaker.voices, id: \.identifier) { voice in
+                        let quality = voice.quality == .premium ? " · Premium" : voice.quality == .enhanced ? " · Enhanced" : ""
+                        Text("\(voice.name) (\(voice.language))\(quality)")
+                            .tag(voice.identifier)
+                    }
+                }
+                LabeledContent("Speed") {
+                    HStack(spacing: 10) {
+                        Image(systemName: "tortoise").foregroundStyle(.secondary)
+                        Slider(value: $speechRate, in: 0.3...0.75)
+                            .frame(width: 180)
+                        Image(systemName: "hare").foregroundStyle(.secondary)
+                        Button("Preview") { Speaker.shared.preview() }
+                    }
+                }
+            } header: {
+                Text("Speech")
+            } footer: {
+                Text("Hover a reply and click the speaker to hear it; code and tables are skipped. For more natural voices, download a Premium or Enhanced one in System Settings › Accessibility › Spoken Content › System Voice › Manage Voices.")
+                    .foregroundStyle(.secondary)
+            }
         }
         .formStyle(.grouped)
         .frame(width: 560)
@@ -92,6 +122,8 @@ private struct GeneralSettings: View {
 private struct AppearanceSettings: View {
     @AppStorage(Pref.theme) private var theme = Theme.system
     @AppStorage(Pref.accent) private var accent = AccentChoice.system
+    @AppStorage(Pref.darkness) private var darkness = Pref.defaultDarkness
+    @AppStorage(Pref.darkSidebar) private var darkSidebar = false
     @AppStorage(Pref.textSize) private var textSize = Pref.defaultTextSize
     @AppStorage(Pref.codeTheme) private var codeTheme = HighlightTheme.xcode
     @AppStorage(Pref.bubbleStyle) private var bubbleStyle = BubbleStyle.gray
@@ -117,6 +149,16 @@ private struct AppearanceSettings: View {
                     }
                 }
                 .padding(.vertical, 6)
+
+                LabeledContent("Dark mode darkness") {
+                    HStack(spacing: 10) {
+                        Text("Gray").foregroundStyle(.secondary)
+                        Slider(value: $darkness, in: 0...1)
+                            .frame(width: 180)
+                        Text("Black").foregroundStyle(.secondary)
+                    }
+                }
+                Toggle("Darken the sidebar too", isOn: $darkSidebar)
 
                 LabeledContent("Accent color") {
                     HStack(spacing: 9) {
@@ -189,6 +231,7 @@ private struct AppearanceSettings: View {
 
 /// A short sample conversation, drawn by the real transcript views so every setting shows as it will look.
 private struct TranscriptPreview: View {
+    @AppStorage(Pref.darkness) private var darkness = Pref.defaultDarkness
     private static let entries: [Entry] = [
         Entry(id: "u", kind: .user, text: "Can you add a theme picker to the settings screen?"),
         Entry(id: "t1", kind: .tool, tool: ToolCall(
@@ -212,7 +255,7 @@ private struct TranscriptPreview: View {
             .padding(.vertical, 16)
             .frame(maxWidth: .infinity, maxHeight: 290, alignment: .top)
             .clipped()
-            .background(.transcriptBackground)
+            .background(Color.transcript(darkness: darkness))
             .allowsHitTesting(false)
             .accessibilityLabel("Preview")
     }
@@ -265,10 +308,12 @@ private struct ThemeOption: View {
 /// Sidebar, a reply, your bubble, and the composer, in a few rounded strokes.
 private struct MiniWindow: View {
     let dark: Bool
+    @AppStorage(Pref.darkness) private var darkness = Pref.defaultDarkness
+    @AppStorage(Pref.darkSidebar) private var darkSidebar = false
 
     var body: some View {
-        let background = dark ? Color(white: 0.13) : Color(white: 0.98)
-        let sidebar = dark ? Color(white: 0.2) : Color(white: 0.9)
+        let background = dark ? Color(white: 0.118 * (1 - darkness)) : Color(white: 0.98)
+        let sidebar = dark ? Color(white: darkSidebar ? Color.sidebarWhite(darkness: darkness) : 0.2) : Color(white: 0.9)
         let ink = dark ? Color.white.opacity(0.28) : Color.black.opacity(0.16)
         HStack(spacing: 0) {
             VStack(alignment: .leading, spacing: 4) {

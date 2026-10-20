@@ -142,6 +142,8 @@ final class Store {
 
     /// Sends what the composer holds, running slash commands the app owns (/clear, /model, /help…) itself.
     func submit(_ text: String, attachments: [Attachment], in session: Session?) {
+        // You're talking again; a reply still being read aloud would talk over you.
+        Speaker.shared.stop()
         let project = session?.project ?? draftProject
         guard text.hasPrefix("/"), attachments.isEmpty, let project else {
             return send(text, attachments: attachments, in: session, isCommand: false)
@@ -252,6 +254,8 @@ final class Store {
         let panel = NSOpenPanel()
         panel.canChooseDirectories = true
         panel.canChooseFiles = false
+        // "New Folder" in the panel: a new project starts here.
+        panel.canCreateDirectories = true
         panel.prompt = "Open"
         panel.message = "Choose a project folder for Claude to work in."
         guard panel.runModal() == .OK, let url = panel.url else { return }

@@ -3,6 +3,8 @@ import SwiftUI
 struct ContentView: View {
     @Environment(Store.self) private var store
     @Environment(\.openSettings) private var openSettings
+    @Environment(\.colorScheme) private var colorScheme
+    @AppStorage(Pref.darkness) private var darkness = Pref.defaultDarkness
 
     var body: some View {
         NavigationSplitView {
@@ -17,7 +19,9 @@ struct ContentView: View {
                     NewSessionView()
                 }
             }
-            .background(.transcriptBackground)
+            .background(Color.transcript(darkness: darkness))
+            // The toolbar's own gray would band the top of a darkened page; let the page show through.
+            .toolbarBackgroundVisibility(colorScheme == .dark && darkness > 0 ? .hidden : .automatic, for: .windowToolbar)
         }
         #if DEBUG
         // HYPERCODE_OPEN_SETTINGS=1 opens Settings at launch, for checking it by eye.
@@ -59,6 +63,7 @@ struct Sidebar: View {
                 }
             }
         }
+        .modifier(SidebarDarkening())
         .searchable(text: $search, placement: .sidebar, prompt: "Search")
         .overlay {
             if store.projects.isEmpty {
@@ -196,5 +201,22 @@ struct NewSessionView: View {
         }
         .modifier(AttachmentDrop(draft: store.draft(for: "new")))
         .navigationTitle("New Session")
+    }
+}
+
+/// With "Darken the sidebar too" on, the sidebar follows the darkness slider in dark mode.
+/// Off, it keeps the system's translucent material.
+private struct SidebarDarkening: ViewModifier {
+    @AppStorage(Pref.darkness) private var darkness = Pref.defaultDarkness
+    @AppStorage(Pref.darkSidebar) private var darkSidebar = false
+
+    func body(content: Content) -> some View {
+        if darkSidebar {
+            content
+                .scrollContentBackground(.hidden)
+                .background(Color.sidebar(darkness: darkness))
+        } else {
+            content
+        }
     }
 }

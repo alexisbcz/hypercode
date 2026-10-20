@@ -102,6 +102,7 @@ struct TranscriptList: View {
 private struct QueueView: View {
     let session: Session
     let draft: Draft
+    @AppStorage(Pref.darkness) private var darkness = Pref.defaultDarkness
     @AppStorage(Pref.readingWidth) private var readingWidth = ReadingWidth.standard
 
     var body: some View {
@@ -146,7 +147,7 @@ private struct QueueView: View {
         .padding(.horizontal, 24)
         .padding(.top, 10)
         .frame(maxWidth: .infinity)
-        .background(.transcriptBackground)
+        .background(Color.transcript(darkness: darkness))
     }
 
     /// Pulls a queued message back into the composer, keeping whatever is already typed.

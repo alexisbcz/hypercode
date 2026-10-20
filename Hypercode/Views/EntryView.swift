@@ -11,6 +11,7 @@ struct EntryView: View, Equatable {
     @AppStorage(Pref.expandThinking) private var expandThinking = false
     /// Nil until toggled by hand, so it follows the "expand by default" setting.
     @State private var isThinkingOpen: Bool?
+    @State private var isHovered = false
 
     var body: some View {
         switch entry.kind {
@@ -48,6 +49,8 @@ struct EntryView: View, Equatable {
             .padding(.leading, plain ? 0 : 80)
         case .assistant:
             MarkdownView(text: entry.text)
+                .overlay(alignment: .topTrailing) { SpeakButton(entry: entry, isHovered: isHovered) }
+                .onHover { isHovered = $0 }
         case .thinking:
             DisclosureGroup("Thinking", isExpanded: Binding(get: { isThinkingOpen ?? expandThinking }, set: { isThinkingOpen = $0 })) {
                 Text(entry.text)
@@ -226,5 +229,28 @@ private enum Thumbnails {
         let image = NSImage(cgImage: thumbnail, size: NSSize(width: thumbnail.width / 2, height: thumbnail.height / 2))
         cache.setObject(image, forKey: key)
         return image
+    }
+}
+
+/// Reads a reply aloud; shown while hovering the reply, and kept while it's being read so it can stop it.
+private struct SpeakButton: View {
+    let entry: Entry
+    let isHovered: Bool
+    private var speaker: Speaker { .shared }
+
+    var body: some View {
+        let speaking = speaker.isSpeaking(entry)
+        if isHovered || speaking {
+            Button(speaking ? "Stop Reading" : "Read Aloud", systemImage: speaking ? "stop.circle.fill" : "speaker.wave.2") {
+                if speaking { speaker.stop() } else { speaker.speak([entry]) }
+            }
+            .labelStyle(.iconOnly)
+            .buttonStyle(.borderless)
+            .foregroundStyle(speaking ? AnyShapeStyle(.tint) : AnyShapeStyle(.secondary))
+            .padding(4)
+            .background(.background.opacity(0.85), in: .circle)
+            .help(speaking ? "Stop reading" : "Read aloud")
+            .transition(.opacity)
+        }
     }
 }

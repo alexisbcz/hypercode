@@ -201,6 +201,10 @@ final class Session: Identifiable {
             if event["is_error"]?.bool == true {
                 let errors = (event["errors"]?.array ?? []).compactMap(\.string)
                 append(.error, event["result"]?.string ?? (errors.isEmpty ? "Something went wrong." : errors.joined(separator: "\n")))
+            } else if UserDefaults.standard.bool(forKey: Pref.speechAutoRead) {
+                // Read this turn's replies: everything Claude wrote since your last message.
+                let turnStart = entries.lastIndex { $0.kind == .user || $0.kind == .command }.map { $0 + 1 } ?? 0
+                Speaker.shared.speak(entries[turnStart...].filter { $0.kind == .assistant })
             }
             if let model, let window = event["modelUsage"]?[model]?["contextWindow"], case .number(let n) = window {
                 contextWindow = Int(n)

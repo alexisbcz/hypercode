@@ -12,6 +12,7 @@ struct Composer: View {
     @State private var pasteMonitor: Any?
     @State private var dictation = Dictation()
     @AppStorage(Pref.readingWidth) private var readingWidth = ReadingWidth.standard
+    @AppStorage(Pref.darkness) private var darkness = Pref.defaultDarkness
 
     var body: some View {
         @Bindable var store = store
@@ -92,7 +93,7 @@ struct Composer: View {
         .background {
             // Fade the transcript out beneath the composer.
             Rectangle()
-                .fill(.transcriptBackground)
+                .fill(Color.transcript(darkness: darkness))
                 .mask(LinearGradient(stops: [.init(color: .clear, location: 0), .init(color: .black, location: 0.35)], startPoint: .top, endPoint: .bottom))
                 .ignoresSafeArea()
         }

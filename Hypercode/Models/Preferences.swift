@@ -6,6 +6,8 @@ import SwiftUI
 enum Pref {
     static let theme = "appearance.theme"
     static let accent = "appearance.accent"
+    static let darkness = "appearance.darkness"
+    static let darkSidebar = "appearance.darkSidebar"
     static let textSize = "appearance.textSize"
     static let codeTheme = "appearance.codeTheme"
     static let bubbleStyle = "appearance.bubbleStyle"
@@ -18,12 +20,15 @@ enum Pref {
     static let showTools = "conversation.showTools"
     static let expandTools = "conversation.expandTools"
     static let dictationLocale = "dictation.locale"
+    static let speechVoice = "speech.voice"
+    static let speechRate = "speech.rate"
+    static let speechAutoRead = "speech.autoRead"
 
     static let defaultTextSize: Double = 13
 
     /// Back to how the app looks out of the box.
     static func resetAppearance() {
-        for key in [theme, accent, textSize, codeTheme, bubbleStyle, density, readingWidth, sidebarSessions, sidebarDates] {
+        for key in [theme, accent, darkness, darkSidebar, textSize, codeTheme, bubbleStyle, density, readingWidth, sidebarSessions, sidebarDates] {
             UserDefaults.standard.removeObject(forKey: key)
         }
     }
@@ -107,10 +112,31 @@ enum ReadingWidth: String, CaseIterable, Identifiable {
     }
 }
 
-extension ShapeStyle where Self == Color {
-    /// The conversation's page: white in light mode, near-black in dark mode, so it stands apart from the
-    /// gray sidebar in both (the default window gray made the dark transcript blend into the sidebar).
-    static var transcriptBackground: Color { Color(nsColor: .textBackgroundColor) }
+extension Pref {
+    /// How dark dark mode goes: 0 is the system's grays, 1 is true black.
+    static let defaultDarkness = 1.0
+}
+
+extension Color {
+    /// The conversation's page: white in light mode; in dark mode, from the system's near-black (#1E1E1E)
+    /// down to true black as `darkness` goes from 0 to 1.
+    static func transcript(darkness: Double) -> Color {
+        dynamic(light: .textBackgroundColor, dark: NSColor(white: 0.118 * (1 - darkness), alpha: 1))
+    }
+
+    /// The sidebar when it's darkened too: clear in light mode (the native material shows through), and in
+    /// dark mode from the system's sidebar gray down to #0D0D0D, a step above the black page so the two stay apart.
+    static func sidebar(darkness: Double) -> Color {
+        dynamic(light: .clear, dark: NSColor(white: sidebarWhite(darkness: darkness), alpha: 1))
+    }
+
+    static func sidebarWhite(darkness: Double) -> Double { 0.05 + 0.115 * (1 - darkness) }
+
+    private static func dynamic(light: NSColor, dark: NSColor) -> Color {
+        Color(nsColor: NSColor(name: nil) { appearance in
+            appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua ? dark : light
+        })
+    }
 }
 
 extension EnvironmentValues {
