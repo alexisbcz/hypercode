@@ -15,6 +15,9 @@ packages:
   HighlightSwift:
     url: https://github.com/appstefan/HighlightSwift
     from: 1.1.0
+  MLXAudio:
+    url: https://github.com/Blaizzy/mlx-audio-swift
+    branch: main
 targets:
   Hypercode:
     type: application
@@ -24,6 +27,10 @@ targets:
     dependencies:
       - package: Markdown
       - package: HighlightSwift
+      - package: MLXAudio
+        product: MLXAudioTTS
+      - package: MLXAudio
+        product: MLXAudioCore
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: dev.alexis.Hypercode

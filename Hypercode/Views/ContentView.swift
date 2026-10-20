@@ -20,8 +20,10 @@ struct ContentView: View {
                 }
             }
             .background(Color.transcript(darkness: darkness))
-            // The toolbar's own gray would band the top of a darkened page; let the page show through.
-            .toolbarBackgroundVisibility(colorScheme == .dark && darkness > 0 ? .hidden : .automatic, for: .windowToolbar)
+            // The toolbar's own gray would band the top of a darkened page, so it takes the page's color.
+            // Opaque, not hidden: hidden let the transcript scroll up behind the title.
+            .toolbarBackground(Color.transcript(darkness: darkness), for: .windowToolbar)
+            .toolbarBackgroundVisibility(colorScheme == .dark && darkness > 0 ? .visible : .automatic, for: .windowToolbar)
         }
         #if DEBUG
         // HYPERCODE_OPEN_SETTINGS=1 opens Settings at launch, for checking it by eye.

@@ -240,7 +240,13 @@ private struct SpeakButton: View {
 
     var body: some View {
         let speaking = speaker.isSpeaking(entry)
-        if isHovered || speaking {
+        if speaking, speaker.isPreparing {
+            // Loading the voice model (or downloading it, the first time) before the first words.
+            ProgressView()
+                .controlSize(.small)
+                .padding(4)
+                .help("Preparing the voice…")
+        } else if isHovered || speaking {
             Button(speaking ? "Stop Reading" : "Read Aloud", systemImage: speaking ? "stop.circle.fill" : "speaker.wave.2") {
                 if speaking { speaker.stop() } else { speaker.speak([entry]) }
             }

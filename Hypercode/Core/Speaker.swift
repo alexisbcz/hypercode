@@ -3,15 +3,26 @@ import Markdown
 import NaturalLanguage
 import Observation
 
-/// Reads Claude's replies aloud with the system's speech voices, on-device.
+/// The voice engine reading replies aloud.
+enum SpeechEngine: String, CaseIterable, Identifiable {
+    case pocket, system
+    var id: String { rawValue }
+    var label: String { self == .pocket ? "Pocket TTS" : "macOS Voices" }
+}
+
+/// Reads Claude's replies aloud, on-device: Kyutai's Pocket TTS by default, or the macOS voices.
 @Observable
 final class Speaker: NSObject {
     static let shared = Speaker()
 
     /// The entries being read right now, so their buttons can show "Stop".
     private(set) var speaking: Set<String> = []
+    /// True until the first audio plays: the model is loading, or downloading on first use.
+    private(set) var isPreparing = false
 
     @ObservationIgnored private let synthesizer = AVSpeechSynthesizer()
+    @ObservationIgnored private let audio = AudioQueue()
+    @ObservationIgnored private var task: Task<Void, Never>?
 
     override init() {
         super.init()
@@ -25,16 +36,83 @@ final class Speaker: NSObject {
         stop()
         let text = entries.map { Self.spokenText($0.text) }.filter { !$0.isEmpty }.joined(separator: "\n\n")
         guard !text.isEmpty else { return }
-        let utterance = AVSpeechUtterance(string: text)
-        utterance.voice = Self.voice(for: text)
-        utterance.rate = Self.rate
         speaking = Set(entries.map(\.id))
-        synthesizer.speak(utterance)
+        let engine = SpeechEngine(rawValue: UserDefaults.standard.string(forKey: Pref.speechEngine) ?? "") ?? .pocket
+        switch engine {
+        case .pocket: speakWithPocket(text)
+        case .system: speakWithSystem(text)
+        }
     }
 
     func stop() {
+        task?.cancel()
+        task = nil
+        audio.stop()
         if synthesizer.isSpeaking { synthesizer.stopSpeaking(at: .immediate) }
+        isPreparing = false
         speaking = []
+    }
+
+    private func speakWithSystem(_ text: String) {
+        let utterance = AVSpeechUtterance(string: text)
+        utterance.voice = Self.voice(for: text)
+        utterance.rate = Self.rate
+        synthesizer.speak(utterance)
+    }
+
+    /// Generates sentence by sentence and plays each as soon as it's ready, while the next one generates.
+    private func speakWithPocket(_ text: String) {
+        let voice = UserDefaults.standard.string(forKey: Pref.pocketVoice) ?? PocketVoice.voices[0]
+        let speed = Float(UserDefaults.standard.object(forKey: Pref.speechRate) as? Double ?? 0.5) * 2
+        let chunks = Self.chunks(of: text)
+        isPreparing = true
+        task = Task {
+            do {
+                let sampleRate = try await PocketVoice.shared.load()
+                try Task.checkCancellation()
+                try audio.start(sampleRate: sampleRate, speed: speed) { self.finished() }
+                for chunk in chunks {
+                    let samples = try await PocketVoice.shared.synthesize(chunk, voice: voice)
+                    try Task.checkCancellation()
+                    audio.enqueue(samples)
+                    isPreparing = false
+                }
+                audio.finish()
+            } catch is CancellationError {
+            } catch {
+                // No model yet and no network, say: the macOS voice is better than silence.
+                isPreparing = false
+                speakWithSystem(text)
+            }
+        }
+    }
+
+    private func finished() {
+        task = nil
+        isPreparing = false
+        speaking = []
+    }
+
+    /// Sentences, with short ones joined, so each generated piece is long enough to sound natural
+    /// and the first is short enough to start quickly.
+    static func chunks(of text: String) -> [String] {
+        let tokenizer = NLTokenizer(unit: .sentence)
+        tokenizer.string = text
+        var chunks: [String] = []
+        var current = ""
+        tokenizer.enumerateTokens(in: text.startIndex..<text.endIndex) { range, _ in
+            let sentence = text[range].trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !sentence.isEmpty else { return true }
+            current += (current.isEmpty ? "" : " ") + sentence
+            // The first piece goes out alone so speech starts fast; later ones gather up to ~240 characters.
+            if chunks.isEmpty || current.count > 240 {
+                chunks.append(current)
+                current = ""
+            }
+            return true
+        }
+        if !current.isEmpty { chunks.append(current) }
+        return chunks
     }
 
     /// A sample in the chosen voice, for Settings.
@@ -104,7 +182,7 @@ final class Speaker: NSObject {
 
 extension Speaker: AVSpeechSynthesizerDelegate {
     nonisolated func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didFinish utterance: AVSpeechUtterance) {
-        DispatchQueue.main.async { MainActor.assumeIsolated { Speaker.shared.speaking = [] } }
+        DispatchQueue.main.async { MainActor.assumeIsolated { Speaker.shared.finished() } }
     }
 }
 

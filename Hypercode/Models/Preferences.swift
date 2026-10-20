@@ -21,6 +21,8 @@ enum Pref {
     static let expandTools = "conversation.expandTools"
     static let dictationLocale = "dictation.locale"
     static let speechVoice = "speech.voice"
+    static let speechEngine = "speech.engine"
+    static let pocketVoice = "speech.pocketVoice"
     static let speechRate = "speech.rate"
     static let speechAutoRead = "speech.autoRead"
 

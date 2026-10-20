@@ -76,6 +76,9 @@ struct Composer: View {
                     ForEach(PermissionMode.allCases) { Text($0.label).tag($0) }
                 }
                 Spacer()
+                if let session = store.selectedSession {
+                    ContextUsage(session: session)
+                }
                 ModelMenu()
                 if let effort = store.config.effort, !store.efforts.isEmpty {
                     OptionMenu(symbol: "gauge.with.dots.needle.50percent", title: effort.label, selection: $store.config.effort) {
@@ -338,5 +341,26 @@ private struct OptionMenu<Value: Hashable, Content: View>: View {
         .tint(.secondary)
         .fixedSize()
         .foregroundStyle(.secondary)
+    }
+}
+
+/// "42K / 1M": how much of the model's context window the conversation fills.
+private struct ContextUsage: View {
+    let session: Session
+
+    var body: some View {
+        if let tokens = session.contextTokens {
+            let window = session.contextWindow ?? 0
+            Label(window > 0 ? "\(compact(tokens)) / \(compact(window))" : "\(compact(tokens)) tokens", systemImage: "chart.pie")
+                .foregroundStyle(.secondary)
+                .fixedSize()
+                .help(window > 0
+                      ? "Context: \(tokens.formatted()) of \(window.formatted()) tokens (\((Double(tokens) / Double(window)).formatted(.percent.precision(.fractionLength(0)))))"
+                      : "Context: \(tokens.formatted()) tokens")
+        }
+    }
+
+    private func compact(_ n: Int) -> String {
+        n.formatted(.number.notation(.compactName).precision(.fractionLength(0...1)))
     }
 }

@@ -32,6 +32,8 @@ private struct GeneralSettings: View {
     @AppStorage(Pref.speechVoice) private var speechVoice = ""
     @AppStorage(Pref.speechRate) private var speechRate = 0.5
     @AppStorage(Pref.speechAutoRead) private var speechAutoRead = false
+    @AppStorage(Pref.speechEngine) private var speechEngine = SpeechEngine.pocket
+    @AppStorage(Pref.pocketVoice) private var pocketVoice = PocketVoice.voices[0]
 
     var body: some View {
         @Bindable var store = store
@@ -82,13 +84,22 @@ private struct GeneralSettings: View {
 
             Section {
                 Toggle("Read replies aloud when they finish", isOn: $speechAutoRead)
-                Picker("Voice", selection: $speechVoice) {
-                    Text("Best for Each Reply's Language").tag("")
-                    Divider()
-                    ForEach(Speaker.voices, id: \.identifier) { voice in
-                        let quality = voice.quality == .premium ? " · Premium" : voice.quality == .enhanced ? " · Enhanced" : ""
-                        Text("\(voice.name) (\(voice.language))\(quality)")
-                            .tag(voice.identifier)
+                Picker("Engine", selection: $speechEngine) {
+                    ForEach(SpeechEngine.allCases) { Text($0.label).tag($0) }
+                }
+                if speechEngine == .pocket {
+                    Picker("Voice", selection: $pocketVoice) {
+                        ForEach(PocketVoice.voices, id: \.self) { Text($0.capitalized).tag($0) }
+                    }
+                } else {
+                    Picker("Voice", selection: $speechVoice) {
+                        Text("Best for Each Reply's Language").tag("")
+                        Divider()
+                        ForEach(Speaker.voices, id: \.identifier) { voice in
+                            let quality = voice.quality == .premium ? " · Premium" : voice.quality == .enhanced ? " · Enhanced" : ""
+                            Text("\(voice.name) (\(voice.language))\(quality)")
+                                .tag(voice.identifier)
+                        }
                     }
                 }
                 LabeledContent("Speed") {
@@ -103,7 +114,9 @@ private struct GeneralSettings: View {
             } header: {
                 Text("Speech")
             } footer: {
-                Text("Hover a reply and click the speaker to hear it; code and tables are skipped. For more natural voices, download a Premium or Enhanced one in System Settings › Accessibility › Spoken Content › System Voice › Manage Voices.")
+                Text(speechEngine == .pocket
+                     ? "Hover a reply and click the speaker to hear it; code and tables are skipped. Pocket TTS, by Kyutai, runs on your Mac: the first use downloads its model (about 240 MB) from Hugging Face. Its voices speak English."
+                     : "Hover a reply and click the speaker to hear it; code and tables are skipped. For more natural voices, download a Premium or Enhanced one in System Settings › Accessibility › Spoken Content › System Voice › Manage Voices.")
                     .foregroundStyle(.secondary)
             }
         }

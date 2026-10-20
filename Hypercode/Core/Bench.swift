@@ -1,4 +1,5 @@
 #if DEBUG
+import AVFoundation
 import Foundation
 
 /// HYPERCODE_REPLAY=<stream-json file> plays a recorded `claude` stream into a new session at a steady pace,
@@ -39,6 +40,46 @@ enum Bench {
                 DispatchQueue.main.asyncAfter(deadline: .now() + interval) { MainActor.assumeIsolated { step(index + 1) } }
             }
             step(0)
+        }
+    }
+}
+
+extension Bench {
+    /// HYPERCODE_TTS_FILE=<out.wav> synthesizes a sample reply with Pocket TTS, writes it as a WAV,
+    /// prints load and generation times against the audio's length, and quits. Nothing is played.
+    static func synthesizeIfRequested() {
+        guard let path = ProcessInfo.processInfo.environment["HYPERCODE_TTS_FILE"] else { return }
+        let text = Speaker.spokenText("""
+        Done. The home screen now shows the next seven days under the current conditions.
+
+        I reused the data the service already fetches, so there's no extra network call. All twenty-four tests pass.
+        """)
+        Task {
+            do {
+                let start = Date()
+                let sampleRate = try await PocketVoice.shared.load()
+                let loaded = Date()
+                var samples: [Float] = []
+                var firstChunk: TimeInterval?
+                for chunk in Speaker.chunks(of: text) {
+                    samples += try await PocketVoice.shared.synthesize(chunk, voice: "alba")
+                    if firstChunk == nil { firstChunk = Date().timeIntervalSince(loaded) }
+                }
+                let generation = Date().timeIntervalSince(loaded)
+                let seconds = Double(samples.count) / Double(sampleRate)
+                let rms = sqrt(samples.reduce(0) { $0 + Double($1 * $1) } / Double(max(1, samples.count)))
+                let format = AVAudioFormat(standardFormatWithSampleRate: Double(sampleRate), channels: 1)!
+                let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: AVAudioFrameCount(samples.count))!
+                buffer.frameLength = buffer.frameCapacity
+                samples.withUnsafeBufferPointer { buffer.floatChannelData![0].update(from: $0.baseAddress!, count: samples.count) }
+                let file = try AVAudioFile(forWriting: URL(fileURLWithPath: path), settings: format.settings)
+                try file.write(from: buffer)
+                print(String(format: "TTS load=%.1fs first-sentence=%.2fs generated=%.2fs audio=%.1fs speed=%.1fx realtime rms=%.3f rate=%d",
+                             loaded.timeIntervalSince(start), firstChunk ?? 0, generation, seconds, seconds / generation, rms, sampleRate))
+            } catch {
+                print("TTS failed: \(error)")
+            }
+            exit(0)
         }
     }
 }
