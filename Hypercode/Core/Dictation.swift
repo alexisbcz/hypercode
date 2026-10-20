@@ -13,7 +13,6 @@ final class Dictation {
     @ObservationIgnored private var engine: AVAudioEngine?
     @ObservationIgnored private var request: SFSpeechAudioBufferRecognitionRequest?
     @ObservationIgnored private var task: SFSpeechRecognitionTask?
-    @ObservationIgnored private let recognizer = SFSpeechRecognizer() ?? SFSpeechRecognizer(locale: Locale(identifier: "en-US"))
 
     /// Starts listening; `onText` gets the whole transcript so far each time it changes.
     func start(onText: @escaping (String) -> Void) async {
@@ -23,7 +22,11 @@ final class Dictation {
             error = "Allow Microphone and Speech Recognition for Hypercode in System Settings › Privacy & Security."
             return
         }
-        guard let recognizer, recognizer.isAvailable else {
+        // The language picked in Settings, else the system's.
+        let chosen = UserDefaults.standard.string(forKey: Pref.dictationLocale).flatMap { SFSpeechRecognizer(locale: Locale(identifier: $0)) }
+        guard let recognizer = chosen ?? SFSpeechRecognizer() ?? SFSpeechRecognizer(locale: Locale(identifier: "en-US")),
+              recognizer.isAvailable
+        else {
             error = "Speech recognition isn't available right now."
             return
         }

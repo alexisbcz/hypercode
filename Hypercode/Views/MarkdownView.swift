@@ -29,6 +29,7 @@ private struct BlockChildren: View {
 private struct Block: View {
     let markup: any Markup
     @Environment(\.projectRoot) private var root
+    @Environment(\.textSize) private var textSize
 
     var body: some View {
         if let paragraph = markup as? Paragraph {
@@ -37,7 +38,7 @@ private struct Block: View {
                 .fixedSize(horizontal: false, vertical: true)
         } else if let heading = markup as? Heading {
             SwiftUI.Text(Inline.render(heading, root: root))
-                .font(Self.font(for: heading.level))
+                .font(.system(size: textSize * Self.scale(for: heading.level), weight: .semibold))
                 .padding(.top, heading.level <= 2 ? 8 : 4)
         } else if let code = markup as? CodeBlock {
             CodeBlockView(code: code.code.trimmingCharacters(in: .newlines), language: code.language)
@@ -57,18 +58,19 @@ private struct Block: View {
         } else if markup is ThematicBreak {
             Divider().padding(.vertical, 4)
         } else if let html = markup as? HTMLBlock {
-            SwiftUI.Text(html.rawHTML).font(.body.monospaced()).foregroundStyle(.secondary)
+            SwiftUI.Text(html.rawHTML).font(.system(size: textSize, design: .monospaced)).foregroundStyle(.secondary)
         } else {
             BlockChildren(parent: markup)
         }
     }
 
-    static func font(for level: Int) -> Font {
+    /// Heading sizes relative to the body, so the text-size setting scales them too.
+    static func scale(for level: Int) -> CGFloat {
         switch level {
-        case 1: .title.weight(.semibold)
-        case 2: .title2.weight(.semibold)
-        case 3: .title3.weight(.semibold)
-        default: .headline
+        case 1: 1.7
+        case 2: 1.35
+        case 3: 1.15
+        default: 1
         }
     }
 }
@@ -94,7 +96,7 @@ private struct ListView: View {
     private func marker(index: Int, item: ListItem) -> some View {
         if let checkbox = item.checkbox {
             Image(systemName: checkbox == .checked ? "checkmark.square.fill" : "square")
-                .foregroundStyle(checkbox == .checked ? Color.accentColor : .secondary)
+                .foregroundStyle(checkbox == .checked ? AnyShapeStyle(.tint) : AnyShapeStyle(.secondary))
         } else if ordered {
             SwiftUI.Text("\(start + index).")
                 .monospacedDigit()
@@ -160,7 +162,8 @@ private enum Inline {
             return Links.linkified(text.string)
         case let code as InlineCode:
             var s = AttributedString(code.code)
-            s.font = .body.monospaced()
+            // The code intent sets in monospace at the surrounding size, so it follows the text-size setting.
+            s.inlinePresentationIntent = .code
             s.backgroundColor = Color.secondary.opacity(0.12)
             s.link = Links.fileReference(inCode: code.code, root: root)
             return s
@@ -210,6 +213,8 @@ struct CodeBlockView: View {
     var language: String?
 
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.textSize) private var textSize
+    @AppStorage(Pref.codeTheme) private var theme = HighlightTheme.xcode
     @State private var highlighted: AttributedString?
     @State private var copied = false
 
@@ -217,7 +222,7 @@ struct CodeBlockView: View {
         VStack(alignment: .leading, spacing: 0) {
             HStack {
                 SwiftUI.Text(language ?? "")
-                    .font(.caption)
+                    .font(.system(size: textSize - 2))
                     .foregroundStyle(.secondary)
                 Spacer()
                 Button(copied ? "Copied" : "Copy", systemImage: copied ? "checkmark" : "doc.on.doc") {
@@ -228,7 +233,7 @@ struct CodeBlockView: View {
                 }
                 .labelStyle(.iconOnly)
                 .buttonStyle(.borderless)
-                .font(.caption)
+                .font(.system(size: textSize - 2))
                 .foregroundStyle(.secondary)
             }
             .padding(.horizontal, 12)
@@ -236,7 +241,7 @@ struct CodeBlockView: View {
 
             ScrollView(.horizontal) {
                 SwiftUI.Text(highlighted ?? AttributedString(code))
-                    .font(.system(.callout, design: .monospaced))
+                    .font(.system(size: textSize - 1, design: .monospaced))
                     .lineSpacing(2)
                     .textSelection(.enabled)
                     .fixedSize(horizontal: true, vertical: false)
@@ -248,9 +253,9 @@ struct CodeBlockView: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(.quinary, in: .rect(cornerRadius: 10))
-        .task(id: "\(colorScheme)\(code)") {
+        .task(id: "\(colorScheme)\(theme.rawValue)\(code)") {
             // Plain output (a tool's stdout, say) gets its web addresses linked instead of colors.
-            highlighted = await Highlighter.highlight(code, language: language, dark: colorScheme == .dark)
+            highlighted = await Highlighter.highlight(code, language: language, theme: theme, dark: colorScheme == .dark)
                 ?? (language == nil ? Links.linkified(code) : nil)
         }
     }
@@ -259,9 +264,9 @@ struct CodeBlockView: View {
 enum Highlighter {
     private static let highlight = Highlight()
 
-    static func highlight(_ code: String, language: String?, dark: Bool) async -> AttributedString? {
+    static func highlight(_ code: String, language: String?, theme: HighlightTheme, dark: Bool) async -> AttributedString? {
         guard let language, !language.isEmpty, code.utf8.count < 100_000 else { return nil }
-        let colors: HighlightColors = dark ? .dark(.xcode) : .light(.xcode)
+        let colors: HighlightColors = dark ? .dark(theme) : .light(theme)
         guard var result = try? await highlight.request(code, mode: .languageAlias(language), colors: colors).attributedText
         else { return nil }
         // highlight.js colors arrive as AppKit attributes; hand them to SwiftUI.

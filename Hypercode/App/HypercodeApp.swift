@@ -9,6 +9,7 @@ struct HypercodeApp: App {
         Window("Hypercode", id: "main") {
             ContentView()
                 .environment(store)
+                .modifier(AppAppearance())
                 .frame(minWidth: 760, minHeight: 480)
         }
         .commands {
@@ -20,8 +21,14 @@ struct HypercodeApp: App {
             }
         }
 
+        Settings {
+            SettingsView()
+                .environment(store)
+        }
+
         MenuBarExtra {
             UsageMenu(monitor: usage)
+                .modifier(AppAppearance())
         } label: {
             UsageMenuLabel(monitor: usage)
         }

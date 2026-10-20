@@ -3,21 +3,12 @@ import SwiftUI
 struct SessionView: View {
     @Environment(Store.self) private var store
     let session: Session
+    @AppStorage(Pref.readingWidth) private var readingWidth = ReadingWidth.standard
 
     var body: some View {
         ScrollView {
-            LazyVStack(alignment: .leading, spacing: 0) {
-                ForEach(Array(session.entries.enumerated()), id: \.element.id) { index, entry in
-                    EntryView(entry: entry)
-                        .padding(.top, index == 0 ? 0 : spacing(before: entry, after: session.entries[index - 1]))
-                }
-                if session.isRunning, session.entries.last?.kind != .assistant {
-                    ProgressView()
-                        .controlSize(.small)
-                        .padding(.top, 16)
-                }
-            }
-            .frame(maxWidth: 760, alignment: .leading)
+            TranscriptList(entries: session.entries, isRunning: session.isRunning)
+                .frame(maxWidth: readingWidth.maxWidth, alignment: .leading)
             .padding(.horizontal, 24)
             .padding(.vertical, 20)
             .frame(maxWidth: .infinity)
@@ -61,13 +52,48 @@ struct SessionView: View {
         )
     }
 
+}
+
+/// The entries of a conversation, spaced and filtered by the conversation and appearance settings.
+/// Settings' preview draws its sample with this too.
+struct TranscriptList: View {
+    let entries: [Entry]
+    var isRunning = false
+    @AppStorage(Pref.density) private var density = Density.cozy
+    @AppStorage(Pref.showThinking) private var showThinking = true
+    @AppStorage(Pref.showTools) private var showTools = true
+
+    var body: some View {
+        let visible = entries.filter { entry in
+            switch entry.kind {
+            case .thinking: showThinking
+            case .tool: showTools
+            default: true
+            }
+        }
+        LazyVStack(alignment: .leading, spacing: 0) {
+            ForEach(Array(visible.enumerated()), id: \.element.id) { index, entry in
+                EntryView(entry: entry)
+                    .padding(.top, index == 0 ? 0 : spacing(before: entry, after: visible[index - 1]))
+            }
+            if isRunning, entries.last?.kind != .assistant {
+                ProgressView()
+                    .controlSize(.small)
+                    .padding(.top, 16)
+            }
+        }
+        .modifier(TranscriptStyle())
+    }
+
     /// Tool calls cluster tightly; a new speaker gets room to breathe.
     private func spacing(before entry: Entry, after previous: Entry) -> CGFloat {
-        switch (previous.kind, entry.kind) {
+        let base: CGFloat = switch (previous.kind, entry.kind) {
         case (.tool, .tool), (.thinking, .tool), (.tool, .thinking): 6
-        case (_, .user), (.user, _): 28
+        case (.command, .notice): 10
+        case (_, .user), (.user, _), (_, .command), (.command, _): 28
         default: 18
         }
+        return (base * density.factor).rounded()
     }
 }
 
@@ -75,6 +101,7 @@ struct SessionView: View {
 private struct QueueView: View {
     let session: Session
     let draft: Draft
+    @AppStorage(Pref.readingWidth) private var readingWidth = ReadingWidth.standard
 
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
@@ -114,7 +141,7 @@ private struct QueueView: View {
                 .background(.quinary, in: .rect(cornerRadius: 10))
             }
         }
-        .frame(maxWidth: 760)
+        .frame(maxWidth: readingWidth.maxWidth)
         .padding(.horizontal, 24)
         .padding(.top, 10)
         .frame(maxWidth: .infinity)

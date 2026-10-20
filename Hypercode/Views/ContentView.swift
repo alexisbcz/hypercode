@@ -2,6 +2,7 @@ import SwiftUI
 
 struct ContentView: View {
     @Environment(Store.self) private var store
+    @Environment(\.openSettings) private var openSettings
 
     var body: some View {
         NavigationSplitView {
@@ -15,6 +16,12 @@ struct ContentView: View {
                 NewSessionView()
             }
         }
+        #if DEBUG
+        // HYPERCODE_OPEN_SETTINGS=1 opens Settings at launch, for checking it by eye.
+        .task {
+            if ProcessInfo.processInfo.environment["HYPERCODE_OPEN_SETTINGS"] != nil { openSettings() }
+        }
+        #endif
     }
 }
 
@@ -22,6 +29,10 @@ struct Sidebar: View {
     @Environment(Store.self) private var store
     @State private var search = ""
     @State private var expanded: Set<String> = []
+    /// Sessions listed per project before "Show More"; 0 lists them all.
+    @AppStorage(Pref.sidebarSessions) private var sessionsShown = 5
+
+    private var limit: Int { sessionsShown > 0 ? sessionsShown : .max }
 
     var body: some View {
         @Bindable var store = store
@@ -30,11 +41,11 @@ struct Sidebar: View {
                 Section {
                     let all = store.sessions(in: project).filter(matches)
                     let showAll = expanded.contains(project.id) || !search.isEmpty
-                    ForEach(showAll ? all : Array(all.prefix(5))) { session in
+                    ForEach(showAll ? all : Array(all.prefix(limit))) { session in
                         SessionRow(session: session)
                     }
-                    if all.count > 5, search.isEmpty {
-                        Button(showAll ? "Show Less" : "Show \(all.count - 5) More") {
+                    if all.count > limit, search.isEmpty {
+                        Button(showAll ? "Show Less" : "Show \(all.count - limit) More") {
                             if showAll { expanded.remove(project.id) } else { expanded.insert(project.id) }
                         }
                         .buttonStyle(.plain)
@@ -65,6 +76,7 @@ struct Sidebar: View {
         .safeAreaInset(edge: .bottom) {
             Button("Open Project…", systemImage: "folder.badge.plus") { store.openProject() }
                 .buttonStyle(.borderless)
+                .tint(.secondary)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(12)
         }
@@ -86,6 +98,7 @@ private struct ProjectHeader: View {
             Button("New Session in \(project.name)", systemImage: "plus") { store.newSession(in: project) }
                 .labelStyle(.iconOnly)
                 .buttonStyle(.borderless)
+                .tint(.primary)
                 .padding(.trailing, 8)
         }
         .padding(.bottom, 6)
@@ -106,6 +119,7 @@ private struct SessionRow: View {
     @State private var newTitle = ""
 
     @Environment(\.appearsActive) private var appearsActive
+    @AppStorage(Pref.sidebarDates) private var showsDates = true
 
     private var isSelected: Bool { store.selection == session.id }
 
@@ -116,7 +130,7 @@ private struct SessionRow: View {
             Spacer()
             if store.isBusy(session) {
                 ProgressView().controlSize(.mini)
-            } else {
+            } else if showsDates {
                 Text(session.date, format: .relative(presentation: .named, unitsStyle: .narrow))
                     .font(.caption)
                     .foregroundStyle(isSelected && appearsActive ? AnyShapeStyle(.white.opacity(0.75)) : AnyShapeStyle(.tertiary))
@@ -129,7 +143,7 @@ private struct SessionRow: View {
         // System Settings–style selection: accent pill while active, gray when the window isn't key.
         .listRowBackground(
             RoundedRectangle(cornerRadius: 10)
-                .fill(isSelected ? (appearsActive ? AnyShapeStyle(Color.accentColor) : AnyShapeStyle(.fill.secondary)) : AnyShapeStyle(.clear))
+                .fill(isSelected ? (appearsActive ? AnyShapeStyle(.tint) : AnyShapeStyle(.fill.secondary)) : AnyShapeStyle(.clear))
                 .padding(.horizontal, 10)
         )
         .contextMenu {

@@ -11,6 +11,7 @@ struct Composer: View {
     @FocusState private var isFocused: Bool
     @State private var pasteMonitor: Any?
     @State private var dictation = Dictation()
+    @AppStorage(Pref.readingWidth) private var readingWidth = ReadingWidth.standard
 
     var body: some View {
         @Bindable var store = store
@@ -25,6 +26,7 @@ struct Composer: View {
                 HStack(alignment: .bottom, spacing: 8) {
                     ComposerButton("Attach Files", symbol: "plus", weight: .medium, action: chooseFiles)
                         .help("Attach images or files (you can also drop or paste them)")
+                        .tint(.primary)
 
                     TextField(placeholder, text: $draft.text, axis: .vertical)
                         .textFieldStyle(.plain)
@@ -82,7 +84,7 @@ struct Composer: View {
             }
             .padding(.horizontal, 10)
         }
-        .frame(maxWidth: 760)
+        .frame(maxWidth: readingWidth.maxWidth)
         .padding(.horizontal, 24)
         .padding(.top, 8)
         .padding(.bottom, 16)
@@ -255,12 +257,12 @@ struct AttachmentDrop: ViewModifier {
             .overlay {
                 if isTargeted {
                     RoundedRectangle(cornerRadius: 16)
-                        .strokeBorder(Color.accentColor, style: StrokeStyle(lineWidth: 2, dash: [8, 6]))
-                        .background(Color.accentColor.opacity(0.06), in: .rect(cornerRadius: 16))
+                        .strokeBorder(.tint, style: StrokeStyle(lineWidth: 2, dash: [8, 6]))
+                        .background(.tint.opacity(0.06), in: .rect(cornerRadius: 16))
                         .overlay {
                             Label("Drop to Attach", systemImage: "paperclip")
                                 .font(.title3.weight(.medium))
-                                .foregroundStyle(Color.accentColor)
+                                .foregroundStyle(.tint)
                         }
                         .padding(12)
                         .allowsHitTesting(false)
@@ -306,6 +308,8 @@ private struct ModelMenu: View {
         .menuStyle(.button)
         .buttonStyle(.borderless)
         .menuIndicator(.hidden)
+        // Quiet chrome: stays gray whatever accent color is chosen.
+        .tint(.secondary)
         .fixedSize()
         .foregroundStyle(.secondary)
     }
@@ -329,6 +333,8 @@ private struct OptionMenu<Value: Hashable, Content: View>: View {
         .menuStyle(.button)
         .buttonStyle(.borderless)
         .menuIndicator(.hidden)
+        // Quiet chrome: stays gray whatever accent color is chosen.
+        .tint(.secondary)
         .fixedSize()
         .foregroundStyle(.secondary)
     }

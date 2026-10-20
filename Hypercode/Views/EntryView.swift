@@ -2,11 +2,22 @@ import SwiftUI
 
 struct EntryView: View {
     let entry: Entry
+    @Environment(\.textSize) private var textSize
+    @AppStorage(Pref.bubbleStyle) private var bubbleStyle = BubbleStyle.gray
+    @AppStorage(Pref.expandThinking) private var expandThinking = false
+    /// Nil until toggled by hand, so it follows the "expand by default" setting.
+    @State private var isThinkingOpen: Bool?
 
     var body: some View {
         switch entry.kind {
         case .user:
-            VStack(alignment: .trailing, spacing: 8) {
+            let plain = bubbleStyle == .plain
+            VStack(alignment: plain ? .leading : .trailing, spacing: 8) {
+                if plain {
+                    Text("You")
+                        .fontWeight(.semibold)
+                        .foregroundStyle(.tint)
+                }
                 if !entry.images.isEmpty {
                     HStack(spacing: 8) {
                         ForEach(Array(entry.images.enumerated()), id: \.offset) { _, data in
@@ -18,7 +29,7 @@ struct EntryView: View {
                     HStack(spacing: 6) {
                         ForEach(entry.files, id: \.self) { name in
                             Label(name, systemImage: "doc")
-                                .font(.callout)
+                                .font(.system(size: textSize - 1))
                                 .padding(.horizontal, 10)
                                 .padding(.vertical, 6)
                                 .background(.quinary, in: .capsule)
@@ -26,19 +37,15 @@ struct EntryView: View {
                     }
                 }
                 if !entry.text.isEmpty {
-                    Text(Links.linkified(entry.text))
-                        .textSelection(.enabled)
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 10)
-                        .background(.quaternary, in: .rect(cornerRadius: 16))
+                    bubble(Text(Links.linkified(entry.text)).textSelection(.enabled))
                 }
             }
-            .frame(maxWidth: .infinity, alignment: .trailing)
-            .padding(.leading, 80)
+            .frame(maxWidth: .infinity, alignment: plain ? .leading : .trailing)
+            .padding(.leading, plain ? 0 : 80)
         case .assistant:
             MarkdownView(text: entry.text)
         case .thinking:
-            DisclosureGroup("Thinking") {
+            DisclosureGroup("Thinking", isExpanded: Binding(get: { isThinkingOpen ?? expandThinking }, set: { isThinkingOpen = $0 })) {
                 Text(entry.text)
                     .foregroundStyle(.secondary)
                     .textSelection(.enabled)
@@ -50,8 +57,8 @@ struct EntryView: View {
         case .command:
             // A slash command the user ran: "/context", the name in the accent color.
             Text(entry.text)
-                .font(.callout.monospaced().weight(.semibold))
-                .foregroundStyle(Color.accentColor)
+                .font(.system(size: textSize - 0.5, weight: .semibold, design: .monospaced))
+                .foregroundStyle(.tint)
                 .textSelection(.enabled)
                 .padding(.horizontal, 14)
                 .padding(.vertical, 8)
@@ -70,14 +77,42 @@ struct EntryView: View {
                 .textSelection(.enabled)
         }
     }
+
+    /// Your message as the "Your messages" setting draws it.
+    @ViewBuilder
+    private func bubble(_ text: some View) -> some View {
+        switch bubbleStyle {
+        case .gray:
+            text
+                .padding(.horizontal, 14)
+                .padding(.vertical, 10)
+                .background(.quaternary, in: .rect(cornerRadius: 16))
+        case .tinted:
+            text
+                .foregroundStyle(.white)
+                .tint(.white)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 10)
+                .background(.tint, in: .rect(cornerRadius: 16))
+        case .plain:
+            text
+        }
+    }
 }
 
 struct ToolView: View {
     let tool: ToolCall
-    @State private var isExpanded = false
+    @Environment(\.textSize) private var textSize
+    @AppStorage(Pref.expandTools) private var expandTools = false
+    /// Nil until toggled by hand, so it follows the "expand by default" setting.
+    @State private var isOpen: Bool?
+
+    private var isExpanded: Binding<Bool> {
+        Binding(get: { isOpen ?? expandTools }, set: { isOpen = $0 })
+    }
 
     var body: some View {
-        DisclosureGroup(isExpanded: $isExpanded) {
+        DisclosureGroup(isExpanded: isExpanded) {
             VStack(alignment: .leading, spacing: 8) {
                 if let command = tool.input?["command"]?.string {
                     CodeBlockView(code: command, language: "bash")
@@ -96,7 +131,7 @@ struct ToolView: View {
                     .frame(width: 16)
                 Text(tool.title)
                 Text(tool.summary)
-                    .font(.callout.monospaced())
+                    .font(.system(size: textSize - 1, design: .monospaced))
                     .foregroundStyle(.tertiary)
                     .lineLimit(1)
                     .truncationMode(.middle)
@@ -108,7 +143,7 @@ struct ToolView: View {
             }
             .foregroundStyle(.secondary)
             .contentShape(.rect)
-            .onTapGesture { withAnimation { isExpanded.toggle() } }
+            .onTapGesture { withAnimation { isExpanded.wrappedValue.toggle() } }
         }
     }
 }
