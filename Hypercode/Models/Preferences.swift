@@ -107,6 +107,12 @@ enum ReadingWidth: String, CaseIterable, Identifiable {
     }
 }
 
+extension ShapeStyle where Self == Color {
+    /// The conversation's page: white in light mode, near-black in dark mode, so it stands apart from the
+    /// gray sidebar in both (the default window gray made the dark transcript blend into the sidebar).
+    static var transcriptBackground: Color { Color(nsColor: .textBackgroundColor) }
+}
+
 extension EnvironmentValues {
     /// The transcript's body size; headings, code and captions scale from it.
     @Entry var textSize: CGFloat = Pref.defaultTextSize

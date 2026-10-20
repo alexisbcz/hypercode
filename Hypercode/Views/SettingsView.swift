@@ -212,7 +212,7 @@ private struct TranscriptPreview: View {
             .padding(.vertical, 16)
             .frame(maxWidth: .infinity, maxHeight: 290, alignment: .top)
             .clipped()
-            .background(.background)
+            .background(.transcriptBackground)
             .allowsHitTesting(false)
             .accessibilityLabel("Preview")
     }

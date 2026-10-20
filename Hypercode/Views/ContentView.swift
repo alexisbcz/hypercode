@@ -9,12 +9,15 @@ struct ContentView: View {
             Sidebar()
                 .navigationSplitViewColumnWidth(min: 220, ideal: 260, max: 360)
         } detail: {
-            if let session = store.selectedSession {
-                SessionView(session: session)
-                    .id(session.id)
-            } else {
-                NewSessionView()
+            Group {
+                if let session = store.selectedSession {
+                    SessionView(session: session)
+                        .id(session.id)
+                } else {
+                    NewSessionView()
+                }
             }
+            .background(.transcriptBackground)
         }
         #if DEBUG
         // HYPERCODE_OPEN_SETTINGS=1 opens Settings at launch, for checking it by eye.

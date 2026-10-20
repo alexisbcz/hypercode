@@ -92,7 +92,7 @@ struct Composer: View {
         .background {
             // Fade the transcript out beneath the composer.
             Rectangle()
-                .fill(.background)
+                .fill(.transcriptBackground)
                 .mask(LinearGradient(stops: [.init(color: .clear, location: 0), .init(color: .black, location: 0.35)], startPoint: .top, endPoint: .bottom))
                 .ignoresSafeArea()
         }

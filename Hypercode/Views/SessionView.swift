@@ -145,7 +145,7 @@ private struct QueueView: View {
         .padding(.horizontal, 24)
         .padding(.top, 10)
         .frame(maxWidth: .infinity)
-        .background(.background)
+        .background(.transcriptBackground)
     }
 
     /// Pulls a queued message back into the composer, keeping whatever is already typed.
