@@ -10,6 +10,7 @@ struct Composer: View {
 
     @FocusState private var isFocused: Bool
     @State private var pasteMonitor: Any?
+    @State private var dictation = Dictation()
 
     var body: some View {
         @Bindable var store = store
@@ -25,13 +26,19 @@ struct Composer: View {
                     ComposerButton("Attach Files", symbol: "plus", weight: .medium, action: chooseFiles)
                         .help("Attach images or files (you can also drop or paste them)")
 
-                    TextField(isRunning ? "Queue a follow-up…" : "Ask Claude to build, fix, or explain…", text: $draft.text, axis: .vertical)
+                    TextField(placeholder, text: $draft.text, axis: .vertical)
                         .textFieldStyle(.plain)
                         .font(.title3)
                         .lineLimit(1...12)
                         .focused($isFocused)
                         .onSubmit(send)
                         .frame(minHeight: ComposerButton.size)
+
+                    ComposerButton(dictation.isRecording ? "Stop Dictation" : "Dictate", symbol: dictation.isRecording ? "mic.fill" : "mic", action: toggleDictation)
+                        .foregroundStyle(dictation.isRecording ? AnyShapeStyle(.red) : AnyShapeStyle(.secondary))
+                        .symbolEffect(.pulse, isActive: dictation.isRecording)
+                        .keyboardShortcut("d", modifiers: [.command, .shift])
+                        .help(dictation.isRecording ? "Stop dictation (⇧⌘D)" : "Dictate (⇧⌘D)")
 
                     if isRunning {
                         ComposerButton("Stop", symbol: "stop.circle.fill", action: onStop)
@@ -47,6 +54,14 @@ struct Composer: View {
             .padding(.horizontal, 10)
             .padding(.vertical, 10)
             .glassEffect(in: .rect(cornerRadius: 20))
+
+            if let error = dictation.error {
+                Label(error, systemImage: "mic.slash")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 10)
+            }
 
             HStack(spacing: 16) {
                 if store.selectedSession == nil {
@@ -84,10 +99,30 @@ struct Composer: View {
         .onAppear(perform: installPasteMonitor)
         .onDisappear {
             if let pasteMonitor { NSEvent.removeMonitor(pasteMonitor) }
+            dictation.stop()
         }
     }
 
+    private var placeholder: String {
+        if dictation.isRecording { return "Listening…" }
+        return isRunning ? "Queue a follow-up…" : "Ask Claude to build, fix, or explain…"
+    }
+
+    /// Speech lands after whatever is already typed, and keeps replacing its own words as the recognizer revises them.
+    private func toggleDictation() {
+        if dictation.isRecording {
+            dictation.stop()
+            return
+        }
+        let draft = draft
+        let typed = draft.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        let prefix = typed.isEmpty ? "" : typed + " "
+        isFocused = true
+        Task { await dictation.start { draft.text = prefix + $0 } }
+    }
+
     private func send() {
+        dictation.stop()
         guard !draft.isEmpty else { return }
         onSend(draft.text.trimmingCharacters(in: .whitespacesAndNewlines), draft.attachments)
         draft.clear()

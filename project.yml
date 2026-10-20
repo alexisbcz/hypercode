@@ -31,6 +31,8 @@ targets:
         INFOPLIST_KEY_CFBundleDisplayName: Hypercode
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.developer-tools
+        INFOPLIST_KEY_NSMicrophoneUsageDescription: Hypercode listens while you dictate a prompt.
+        INFOPLIST_KEY_NSSpeechRecognitionUsageDescription: Hypercode turns your dictation into text for the composer.
         ENABLE_APP_SANDBOX: NO
         CODE_SIGN_IDENTITY: "-"
         SWIFT_DEFAULT_ACTOR_ISOLATION: MainActor
