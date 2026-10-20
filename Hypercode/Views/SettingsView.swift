@@ -119,6 +119,8 @@ private struct GeneralSettings: View {
                      : "Hover a reply and click the speaker to hear it; code and tables are skipped. For more natural voices, download a Premium or Enhanced one in System Settings › Accessibility › Spoken Content › System Voice › Manage Voices.")
                     .foregroundStyle(.secondary)
             }
+
+            CommandLineSection()
         }
         .formStyle(.grouped)
         .frame(width: 560)
@@ -127,6 +129,56 @@ private struct GeneralSettings: View {
 
     private static let dictationLocales = SFSpeechRecognizer.supportedLocales().sorted {
         (Locale.current.localizedString(forIdentifier: $0.identifier) ?? "") < (Locale.current.localizedString(forIdentifier: $1.identifier) ?? "")
+    }
+}
+
+/// Installs the `hypercode` command, like VS Code's "Install 'code' command in PATH".
+private struct CommandLineSection: View {
+    @State private var status = CommandLineTool.status
+    @State private var error: String?
+
+    var body: some View {
+        Section {
+            LabeledContent("‘hypercode’ command") {
+                switch status {
+                case .installed:
+                    Button("Uninstall") { run { try CommandLineTool.uninstall() } }
+                case .elsewhere:
+                    Button("Reinstall") { run { try CommandLineTool.install() } }
+                case .notInstalled:
+                    Button("Install") { run { try CommandLineTool.install() } }
+                }
+            }
+        } header: {
+            Text("Command Line")
+        } footer: {
+            Group {
+                if let error {
+                    Text(error).foregroundStyle(.red)
+                } else {
+                    switch status {
+                    case .installed(let link):
+                        Text("Run `hypercode .` in a terminal to open that folder here. Linked at \(link.path).")
+                    case .elsewhere(let link):
+                        Text("\(link.path) opens another copy of Hypercode. Reinstall to point it at this one.")
+                    case .notInstalled:
+                        Text("Adds `hypercode` to your PATH, so `hypercode .` opens the folder you're in.")
+                    }
+                }
+            }
+            .foregroundStyle(.secondary)
+        }
+    }
+
+    private func run(_ action: () throws -> Void) {
+        do {
+            try action()
+            error = nil
+        } catch is CancellationError {
+        } catch {
+            self.error = error.localizedDescription
+        }
+        status = CommandLineTool.status
     }
 }
 
@@ -263,11 +315,10 @@ private struct TranscriptPreview: View {
     ]
 
     var body: some View {
-        TranscriptList(entries: Self.entries)
+        TranscriptList(entries: Self.entries, isLazy: false)
             .padding(.horizontal, 20)
             .padding(.vertical, 16)
-            .frame(maxWidth: .infinity, maxHeight: 290, alignment: .top)
-            .clipped()
+            .frame(maxWidth: .infinity, alignment: .top)
             .background(Color.transcript(darkness: darkness))
             .allowsHitTesting(false)
             .accessibilityLabel("Preview")

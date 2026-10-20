@@ -97,6 +97,28 @@ enum Density: String, CaseIterable, Identifiable {
         case .spacious: 1.45
         }
     }
+
+    /// Extra room between the lines of a paragraph.
+    var lineSpacing: CGFloat {
+        switch self {
+        case .compact: 1
+        case .cozy: 3
+        case .spacious: 6
+        }
+    }
+
+    /// The gap between paragraphs, lists and code blocks within a message.
+    var blockSpacing: CGFloat {
+        switch self {
+        case .compact: 8
+        case .cozy: 14
+        case .spacious: 20
+        }
+    }
+}
+
+extension EnvironmentValues {
+    @Entry var density = Density.cozy
 }
 
 enum ReadingWidth: String, CaseIterable, Identifiable {

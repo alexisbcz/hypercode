@@ -1,0 +1,58 @@
+#!/bin/sh
+#
+# Opens folders in Hypercode from a terminal, like VS Code's `code`:
+#
+#   hypercode .          this folder
+#   hypercode ~/a ~/b    several folders
+#   hypercode            just the app
+#
+# Hypercode links this into your PATH (Hypercode > Install 'hypercode' Command in PATH),
+# so it always runs the copy of the app it came from.
+
+set -eu
+
+usage() {
+  cat <<USAGE
+Usage: hypercode [folder ...]
+
+Opens each folder as a project in Hypercode, with a new session ready.
+A file opens its folder. With no arguments, Hypercode just comes to the front.
+
+Options:
+  -h, --help       show this help
+  -v, --version    print Hypercode's version
+USAGE
+}
+
+# This script lives at Hypercode.app/Contents/Resources/bin/hypercode; the link in PATH points here.
+script=$(realpath "$0")
+app=${script%/Contents/Resources/bin/hypercode}
+[ -d "$app" ] || { echo "hypercode: can't find Hypercode.app from $script" >&2; exit 1; }
+
+folders=""
+for arg in "$@"; do
+  case $arg in
+    -h | --help) usage; exit 0 ;;
+    -v | --version) defaults read "$app/Contents/Info" CFBundleShortVersionString; exit 0 ;;
+    -*) echo "hypercode: unknown option $arg (try --help)" >&2; exit 2 ;;
+  esac
+done
+
+for arg in "$@"; do
+  if [ -d "$arg" ]; then
+    dir=$arg
+  elif [ -e "$arg" ]; then
+    dir=$(dirname "$arg")
+  else
+    echo "hypercode: $arg: no such file or folder" >&2
+    exit 1
+  fi
+  # Newline-separated, so paths with spaces survive the trip to `open`.
+  folders="$folders$(cd "$dir" && pwd -P)
+"
+done
+
+if [ -z "$folders" ]; then
+  exec open -a "$app"
+fi
+printf '%s' "$folders" | tr '\n' '\0' | xargs -0 open -a "$app"

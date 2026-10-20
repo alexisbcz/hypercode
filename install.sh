@@ -8,6 +8,7 @@
 #   --ref <branch|tag>   build another branch or tag (default: main)
 #   --dir <path>         install somewhere else (default: /Applications, or ~/Applications)
 #   --no-open            don't launch the app when done
+#   --no-cli             don't link the `hypercode` command into your PATH
 #   --uninstall          remove the app (from --dir, or both default places)
 #
 # Everything lives in main() so a half-downloaded script can't run.
@@ -68,6 +69,7 @@ Options:
   --ref <branch|tag>   build another branch or tag (default: main)
   --dir <path>         install somewhere else (default: /Applications, or ~/Applications)
   --no-open            don't launch the app when done
+  --no-cli             don't link the hypercode command into your PATH
   --uninstall          remove the app (from --dir, or both default places)
 EOF
 }
@@ -84,6 +86,11 @@ uninstall() {
       quit_app
       rm -rf "$d/$APP_NAME.app"
       step "Removed $d/$APP_NAME.app"
+      for link in "$HOME/.local/bin/hypercode" /opt/homebrew/bin/hypercode /usr/local/bin/hypercode; do
+        if [[ "$(readlink "$link" 2>/dev/null)" == "$d/$APP_NAME.app/"* ]] && rm -f "$link" 2>/dev/null; then
+          step "Removed $link"
+        fi
+      done
       removed=1
     fi
   done
@@ -163,6 +170,25 @@ find_xcodegen() {
   info "XcodeGen $("$XCODEGEN" --version 2>/dev/null | awk '{print $NF}')"
 }
 
+# Links `hypercode` (so `hypercode .` opens a folder) into a writable folder on PATH, as the app's
+# Install 'hypercode' Command in PATH does. Anything by that name that isn't Hypercode's stays.
+link_cli() {
+  local app=$1 dir link
+  for dir in "$HOME/.local/bin" /opt/homebrew/bin /usr/local/bin; do
+    case ":$PATH:" in *":$dir:"*) ;; *) continue ;; esac
+    [[ -d "$dir" && -w "$dir" ]] || continue
+    link="$dir/hypercode"
+    if [[ -e "$link" || -L "$link" ]] && [[ "$(readlink "$link")" != *.app/Contents/Resources/bin/hypercode ]]; then
+      warn "$link already exists and isn't Hypercode's, so the command wasn't linked."
+      return
+    fi
+    ln -sf "$app/Contents/Resources/bin/hypercode" "$link"
+    info "Linked the hypercode command at $link; run \"hypercode .\" to open a folder."
+    return
+  done
+  info "To open folders with \"hypercode .\", use Hypercode > Install 'hypercode' Command in PATH."
+}
+
 after_install() {
   local home=$HOME found=""
   for dir in "$home/.local/bin" "$home/.claude/local" /opt/homebrew/bin /usr/local/bin; do
@@ -177,12 +203,13 @@ after_install() {
 }
 
 main() {
-  local ref=main dest="" open=1 remove=0
+  local ref=main dest="" open=1 cli=1 remove=0
   while (($#)); do
     case $1 in
       --ref) ref=${2:?--ref needs a branch or tag}; shift 2 ;;
       --dir) dest=${2:?--dir needs a path}; shift 2 ;;
       --no-open) open=0; shift ;;
+      --no-cli) cli=0; shift ;;
       --uninstall) remove=1; shift ;;
       -h | --help) usage; exit 0 ;;
       *) die "Unknown option: $1 (try --help)" ;;
@@ -233,6 +260,7 @@ main() {
   rm -f "$log"
 
   after_install
+  ((cli)) && link_cli "$dest/$APP_NAME.app"
 
   printf '\n%s%s is installed.%s Update it by running this script again.\n\n' "$GREEN$BOLD" "$APP_NAME" "$RESET"
   ((open)) && open "$dest/$APP_NAME.app"

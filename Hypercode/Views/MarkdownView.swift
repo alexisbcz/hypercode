@@ -15,10 +15,12 @@ struct MarkdownView: View {
 
 private struct BlockChildren: View {
     let parent: any Markup
-    var spacing: CGFloat = 14
+    /// Nil for the message's own blocks, which follow the Spacing setting.
+    var spacing: CGFloat?
+    @Environment(\.density) private var density
 
     var body: some View {
-        VStack(alignment: .leading, spacing: spacing) {
+        VStack(alignment: .leading, spacing: spacing ?? density.blockSpacing) {
             ForEach(Array(parent.children.enumerated()), id: \.offset) { _, child in
                 Block(markup: child)
             }
@@ -30,11 +32,12 @@ private struct Block: View {
     let markup: any Markup
     @Environment(\.projectRoot) private var root
     @Environment(\.textSize) private var textSize
+    @Environment(\.density) private var density
 
     var body: some View {
         if let paragraph = markup as? Paragraph {
             SwiftUI.Text(Inline.render(paragraph, root: root))
-                .lineSpacing(3)
+                .lineSpacing(density.lineSpacing)
                 .fixedSize(horizontal: false, vertical: true)
         } else if let heading = markup as? Heading {
             SwiftUI.Text(Inline.render(heading, root: root))
@@ -79,13 +82,15 @@ private struct ListView: View {
     let list: any ListItemContainer
     let ordered: Bool
     let start: Int
+    @Environment(\.density) private var density
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        let spacing = (density.blockSpacing * 0.45).rounded()
+        VStack(alignment: .leading, spacing: spacing) {
             ForEach(Array(list.listItems.enumerated()), id: \.offset) { index, item in
                 HStack(alignment: .firstTextBaseline, spacing: 8) {
                     marker(index: index, item: item)
-                    BlockChildren(parent: item, spacing: 6)
+                    BlockChildren(parent: item, spacing: spacing)
                 }
             }
         }

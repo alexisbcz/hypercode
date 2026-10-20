@@ -1,4 +1,5 @@
 #if DEBUG
+import AppKit
 import AVFoundation
 import Foundation
 
@@ -78,6 +79,26 @@ extension Bench {
                              loaded.timeIntervalSince(start), firstChunk ?? 0, generation, seconds, seconds / generation, rms, sampleRate))
             } catch {
                 print("TTS failed: \(error)")
+            }
+            exit(0)
+        }
+    }
+}
+
+extension Bench {
+    /// HYPERCODE_SNAPSHOT=<out.png> saves each visible window as <out>-<title>.png after a few seconds, then quits:
+    /// a way to check the UI by eye when screen recording isn't allowed.
+    static func snapshotIfRequested() {
+        guard let path = ProcessInfo.processInfo.environment["HYPERCODE_SNAPSHOT"] else { return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 4) {
+            for window in NSApp.windows where window.isVisible {
+                guard let view = window.contentView?.superview ?? window.contentView,
+                      let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds)
+                else { continue }
+                view.cacheDisplay(in: view.bounds, to: rep)
+                let name = window.title.isEmpty ? "window" : window.title.replacingOccurrences(of: " ", with: "-")
+                let url = URL(fileURLWithPath: path).deletingPathExtension()
+                try? rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: url.path + "-\(name).png"))
             }
             exit(0)
         }

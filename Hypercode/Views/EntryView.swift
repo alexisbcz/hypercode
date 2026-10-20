@@ -1,13 +1,18 @@
 import SwiftUI
 
-/// Equatable on its entry alone: in a long session, a streaming token re-renders only the row it lands in.
+/// Equatable on its entry and style: in a long session, a streaming token re-renders only the row it lands in,
+/// while a style change in Settings redraws every row at once. The style comes from the list, not from
+/// each row reading the settings itself, so rows can't disagree about it.
 struct EntryView: View, Equatable {
     let entry: Entry
+    var bubbleStyle = BubbleStyle.gray
+    var density = Density.cozy
 
-    nonisolated static func == (a: EntryView, b: EntryView) -> Bool { a.entry == b.entry }
+    nonisolated static func == (a: EntryView, b: EntryView) -> Bool {
+        a.entry == b.entry && a.bubbleStyle == b.bubbleStyle && a.density == b.density
+    }
 
     @Environment(\.textSize) private var textSize
-    @AppStorage(Pref.bubbleStyle) private var bubbleStyle = BubbleStyle.gray
     @AppStorage(Pref.expandThinking) private var expandThinking = false
     /// Nil until toggled by hand, so it follows the "expand by default" setting.
     @State private var isThinkingOpen: Bool?
@@ -42,7 +47,12 @@ struct EntryView: View, Equatable {
                     }
                 }
                 if !entry.text.isEmpty {
-                    bubble(Text(Links.linkified(entry.text)).textSelection(.enabled))
+                    bubble(
+                        Text(Links.linkified(entry.text))
+                            .lineSpacing(density.lineSpacing)
+                            .textSelection(.enabled)
+                            .fixedSize(horizontal: false, vertical: true)
+                    )
                 }
             }
             .frame(maxWidth: .infinity, alignment: plain ? .leading : .trailing)
@@ -54,6 +64,7 @@ struct EntryView: View, Equatable {
         case .thinking:
             DisclosureGroup("Thinking", isExpanded: Binding(get: { isThinkingOpen ?? expandThinking }, set: { isThinkingOpen = $0 })) {
                 Text(entry.text)
+                    .lineSpacing(density.lineSpacing)
                     .foregroundStyle(.secondary)
                     .textSelection(.enabled)
                     .padding(.top, 4)

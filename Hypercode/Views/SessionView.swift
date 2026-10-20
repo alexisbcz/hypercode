@@ -59,7 +59,10 @@ struct SessionView: View {
 struct TranscriptList: View {
     let entries: [Entry]
     var isRunning = false
+    /// Settings' preview sits in a form row, outside any scroll view, where a lazy stack lays out unreliably.
+    var isLazy = true
     @AppStorage(Pref.density) private var density = Density.cozy
+    @AppStorage(Pref.bubbleStyle) private var bubbleStyle = BubbleStyle.gray
     @AppStorage(Pref.showThinking) private var showThinking = true
     @AppStorage(Pref.showTools) private var showTools = true
 
@@ -71,19 +74,35 @@ struct TranscriptList: View {
             default: true
             }
         }
-        LazyVStack(alignment: .leading, spacing: 0) {
-            ForEach(Array(visible.enumerated()), id: \.element.id) { index, entry in
-                EntryView(entry: entry)
-                    .equatable()
-                    .padding(.top, index == 0 ? 0 : spacing(before: entry, after: visible[index - 1]))
-            }
-            if isRunning, entries.last?.kind != .assistant {
-                ProgressView()
-                    .controlSize(.small)
-                    .padding(.top, 16)
+        let rows = ForEach(Array(visible.enumerated()), id: \.element.id) { index, entry in
+            EntryView(entry: entry, bubbleStyle: bubbleStyle, density: density)
+                .equatable()
+                .padding(.top, index == 0 ? 0 : spacing(before: entry, after: visible[index - 1]))
+        }
+        Group {
+            if isLazy {
+                LazyVStack(alignment: .leading, spacing: 0) {
+                    rows
+                    progress
+                }
+            } else {
+                VStack(alignment: .leading, spacing: 0) {
+                    rows
+                    progress
+                }
             }
         }
+        .environment(\.density, density)
         .modifier(TranscriptStyle())
+    }
+
+    @ViewBuilder
+    private var progress: some View {
+        if isRunning, entries.last?.kind != .assistant {
+            ProgressView()
+                .controlSize(.small)
+                .padding(.top, 16)
+        }
     }
 
     /// Tool calls cluster tightly; a new speaker gets room to breathe.

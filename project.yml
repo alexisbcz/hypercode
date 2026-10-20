@@ -24,6 +24,12 @@ targets:
     platform: macOS
     sources:
       - path: Hypercode
+        excludes:
+          - Resources/bin
+      # A folder reference, so the command line tool lands at Contents/Resources/bin/hypercode.
+      - path: Hypercode/Resources/bin
+        type: folder
+        buildPhase: resources
     dependencies:
       - package: Markdown
       - package: HighlightSwift
