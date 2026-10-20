@@ -78,6 +78,14 @@ nonisolated enum JSON: Sendable, Codable, Equatable {
     }
 
     /// Flattens a tool_result `content` (a string, or an array of text blocks).
+    /// The images in a tool_result `content` array, decoded from their base64 blocks.
+    var imageData: [Data] {
+        (array ?? []).compactMap { block in
+            guard block["type"]?.string == "image", let base64 = block["source"]?["data"]?.string else { return nil }
+            return Data(base64Encoded: base64)
+        }
+    }
+
     var flattenedText: String {
         switch self {
         case .string(let s): return s

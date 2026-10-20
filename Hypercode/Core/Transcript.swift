@@ -122,8 +122,7 @@ nonisolated enum Transcript {
                     entries.append(Entry(id: toolID, kind: .tool, tool: ToolCall(name: block["name"]?.string ?? "Tool", input: block["input"])))
                 case "tool_result":
                     if let toolID = block["tool_use_id"]?.string, let index = toolIndex[toolID] {
-                        entries[index].tool?.result = block["content"]?.flattenedText ?? ""
-                        entries[index].tool?.isError = block["is_error"]?.bool ?? false
+                        entries[index].tool?.apply(result: block, details: event["toolUseResult"])
                     }
                 default: break
                 }

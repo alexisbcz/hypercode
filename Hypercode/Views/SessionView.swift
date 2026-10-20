@@ -74,6 +74,7 @@ struct TranscriptList: View {
         LazyVStack(alignment: .leading, spacing: 0) {
             ForEach(Array(visible.enumerated()), id: \.element.id) { index, entry in
                 EntryView(entry: entry)
+                    .equatable()
                     .padding(.top, index == 0 ? 0 : spacing(before: entry, after: visible[index - 1]))
             }
             if isRunning, entries.last?.kind != .assistant {

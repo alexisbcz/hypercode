@@ -63,6 +63,8 @@ final class Store {
             MainActor.assumeIsolated { self?.refreshLive() }
         }
         #if DEBUG
+        // HYPERCODE_REPLAY=<stream-json file> replays a recorded reply and reports main-thread stalls; see Bench.
+        Bench.replayIfRequested(into: self)
         // HYPERCODE_ATTACH=a.png:b.txt pre-attaches files, for checking the composer by eye.
         if let paths = ProcessInfo.processInfo.environment["HYPERCODE_ATTACH"] {
             draft(for: selection ?? "new").add(paths.split(separator: ":").map { URL(fileURLWithPath: String($0)) })

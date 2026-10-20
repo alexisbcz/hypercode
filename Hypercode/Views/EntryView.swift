@@ -1,7 +1,11 @@
 import SwiftUI
 
-struct EntryView: View {
+/// Equatable on its entry alone: in a long session, a streaming token re-renders only the row it lands in.
+struct EntryView: View, Equatable {
     let entry: Entry
+
+    nonisolated static func == (a: EntryView, b: EntryView) -> Bool { a.entry == b.entry }
+
     @Environment(\.textSize) private var textSize
     @AppStorage(Pref.bubbleStyle) private var bubbleStyle = BubbleStyle.gray
     @AppStorage(Pref.expandThinking) private var expandThinking = false
@@ -112,14 +116,32 @@ struct ToolView: View {
     }
 
     var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            disclosure
+            // Images a tool returned (a screenshot it read) show right away, not behind the disclosure.
+            if !tool.images.isEmpty {
+                HStack(spacing: 8) {
+                    ForEach(Array(tool.images.enumerated()), id: \.offset) { _, data in
+                        ImageThumbnail(data: data)
+                    }
+                }
+                .padding(.leading, 22)
+            }
+        }
+    }
+
+    private var disclosure: some View {
         DisclosureGroup(isExpanded: isExpanded) {
             VStack(alignment: .leading, spacing: 8) {
-                if let command = tool.input?["command"]?.string {
+                if tool.isFileEdit, !tool.isError, case let hunks = tool.diffHunks, !hunks.isEmpty {
+                    DiffView(hunks: hunks)
+                } else if let command = tool.input?["command"]?.string {
                     CodeBlockView(code: command, language: "bash")
                 } else if let input = tool.input {
                     CodeBlockView(code: input.pretty, language: "json")
                 }
-                if let result = tool.result, !result.isEmpty {
+                // An edit's "file updated" note adds nothing next to its diff.
+                if let result = tool.result, !result.isEmpty, !tool.isFileEdit || tool.isError {
                     CodeBlockView(code: String(result.prefix(20_000)))
                         .foregroundStyle(tool.isError ? .red : .primary)
                 }
@@ -135,6 +157,14 @@ struct ToolView: View {
                     .foregroundStyle(.tertiary)
                     .lineLimit(1)
                     .truncationMode(.middle)
+                if let stats = tool.diffStats {
+                    HStack(spacing: 4) {
+                        if stats.added > 0 { Text("+\(stats.added)").foregroundStyle(.green) }
+                        if stats.removed > 0 { Text("−\(stats.removed)").foregroundStyle(.red) }
+                    }
+                    .font(.system(size: textSize - 1, design: .monospaced))
+                    .fixedSize()
+                }
                 if tool.result == nil {
                     ProgressView().controlSize(.mini)
                 } else if tool.isError {
@@ -148,12 +178,12 @@ struct ToolView: View {
     }
 }
 
-/// A sent image; click to open it full size in Preview.
+/// A sent or returned image; click to open it full size in Preview.
 private struct ImageThumbnail: View {
     let data: Data
 
     var body: some View {
-        if let image = NSImage(data: data) {
+        if let image = Thumbnails.image(for: data) {
             Image(nsImage: image)
                 .resizable()
                 .scaledToFit()
@@ -170,5 +200,31 @@ private struct ImageThumbnail: View {
         let url = FileManager.default.temporaryDirectory.appending(path: "hypercode-\(abs(data.hashValue)).\(ext)")
         try? data.write(to: url)
         NSWorkspace.shared.open(url)
+    }
+}
+
+/// Small decoded copies of transcript images. Tool screenshots run to several megapixels, and a row
+/// shouldn't decode one in full every time it's drawn.
+private enum Thumbnails {
+    private static let cache: NSCache<NSData, NSImage> = {
+        let cache = NSCache<NSData, NSImage>()
+        cache.countLimit = 200
+        return cache
+    }()
+
+    static func image(for data: Data) -> NSImage? {
+        let key = data as NSData
+        if let cached = cache.object(forKey: key) { return cached }
+        let options: [CFString: Any] = [
+            kCGImageSourceCreateThumbnailFromImageAlways: true,
+            kCGImageSourceCreateThumbnailWithTransform: true,
+            kCGImageSourceThumbnailMaxPixelSize: 480, // 240pt at 2x
+        ]
+        guard let source = CGImageSourceCreateWithData(key, nil),
+              let thumbnail = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary)
+        else { return nil }
+        let image = NSImage(cgImage: thumbnail, size: NSSize(width: thumbnail.width / 2, height: thumbnail.height / 2))
+        cache.setObject(image, forKey: key)
+        return image
     }
 }

@@ -192,8 +192,7 @@ final class Session: Identifiable {
         case "user":
             for block in event["message"]?["content"]?.array ?? [] where block["type"]?.string == "tool_result" {
                 guard let id = block["tool_use_id"]?.string, let index = toolEntries[id] else { continue }
-                entries[index].tool?.result = block["content"]?.flattenedText ?? ""
-                entries[index].tool?.isError = block["is_error"]?.bool ?? false
+                entries[index].tool?.apply(result: block, details: event["tool_use_result"] ?? event["toolUseResult"])
             }
         case "result":
             isRunning = false
@@ -253,6 +252,16 @@ final class Session: Identifiable {
             break
         }
     }
+
+    #if DEBUG
+    /// For `Bench`: a turn in progress, fed recorded events instead of a process.
+    func beginReplay(_ prompt: String) {
+        entries.append(Entry(id: UUID().uuidString, kind: .user, text: prompt))
+        isRunning = true
+    }
+
+    func replay(_ event: JSON) { handle(event) }
+    #endif
 
     private func handleSystem(_ event: JSON) {
         switch event["subtype"]?.string {

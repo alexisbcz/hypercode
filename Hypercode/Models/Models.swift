@@ -6,11 +6,28 @@ nonisolated struct Project: Identifiable, Hashable, Sendable {
     var name: String { url.lastPathComponent }
 }
 
-nonisolated struct ToolCall: Sendable {
+nonisolated struct ToolCall: Equatable, Sendable {
     var name: String
     var input: JSON?
     var result: String?
     var isError = false
+    /// Images the tool returned, like a screenshot Read opened.
+    var images: [Data] = []
+    /// The change an Edit, MultiEdit or Write made, as Claude Code recorded it (with real line numbers).
+    var patch: [DiffHunk]?
+
+    var isFileEdit: Bool { ["Edit", "MultiEdit", "Write"].contains(name) }
+
+    /// Takes a `tool_result` block, plus the structured result Claude Code attaches beside it
+    /// (`toolUseResult` in session files, `tool_use_result` in the live stream).
+    mutating func apply(result block: JSON, details: JSON?) {
+        result = block["content"]?.flattenedText ?? ""
+        isError = block["is_error"]?.bool ?? false
+        images = block["content"]?.imageData ?? []
+        if let hunks = details?["structuredPatch"]?.array, !hunks.isEmpty {
+            patch = hunks.compactMap(DiffHunk.init)
+        }
+    }
 
     var symbol: String {
         switch name {
@@ -55,7 +72,55 @@ nonisolated struct ToolCall: Sendable {
     }
 }
 
-nonisolated struct Entry: Identifiable, Sendable {
+/// One hunk of a unified diff: lines prefixed " ", "-" or "+".
+nonisolated struct DiffHunk: Equatable, Sendable {
+    var oldStart: Int
+    var newStart: Int
+    var lines: [String]
+
+    init(oldStart: Int, newStart: Int, lines: [String]) {
+        self.oldStart = oldStart
+        self.newStart = newStart
+        self.lines = lines
+    }
+
+    init?(_ json: JSON) {
+        guard case .number(let old)? = json["oldStart"], case .number(let new)? = json["newStart"],
+              let lines = json["lines"]?.array?.compactMap(\.string)
+        else { return nil }
+        self.init(oldStart: Int(old), newStart: Int(new), lines: lines)
+    }
+
+    /// A diff computed from an edit's before and after text, for edits recorded without a patch.
+    /// Line numbers aren't known then, so they start at 0, which the diff view reads as "don't show".
+    static func between(_ old: String, _ new: String) -> DiffHunk {
+        let a = old.components(separatedBy: "\n"), b = new.components(separatedBy: "\n")
+        let diff = b.difference(from: a)
+        var removed = Set<Int>(), inserted = Set<Int>()
+        for change in diff {
+            switch change {
+            case .remove(let offset, _, _): removed.insert(offset)
+            case .insert(let offset, _, _): inserted.insert(offset)
+            }
+        }
+        var lines: [String] = []
+        var i = 0, j = 0
+        while i < a.count || j < b.count {
+            if i < a.count, removed.contains(i) {
+                lines.append("-" + a[i]); i += 1
+            } else if j < b.count, inserted.contains(j) {
+                lines.append("+" + b[j]); j += 1
+            } else {
+                if i < a.count { lines.append(" " + a[i]) }
+                i += 1; j += 1
+            }
+        }
+        return DiffHunk(oldStart: 0, newStart: 0, lines: lines)
+    }
+}
+
+/// Equatable so a transcript row can tell it hasn't changed and skip re-rendering while another row streams.
+nonisolated struct Entry: Identifiable, Equatable, Sendable {
     /// `command` is a slash command the user ran ("/context"); `notice` is what a command printed,
     /// or a note from the app or harness ("Conversation compacted").
     enum Kind: Sendable { case user, assistant, thinking, tool, error, command, notice }

@@ -217,6 +217,8 @@ struct CodeBlockView: View {
     @AppStorage(Pref.codeTheme) private var theme = HighlightTheme.xcode
     @State private var highlighted: AttributedString?
     @State private var copied = false
+    /// Set after the first pass: later changes are a block still streaming in, so they wait for a pause.
+    @State private var hasHighlighted = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -254,6 +256,11 @@ struct CodeBlockView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(.quinary, in: .rect(cornerRadius: 10))
         .task(id: "\(colorScheme)\(theme.rawValue)\(code)") {
+            if hasHighlighted {
+                try? await Task.sleep(for: .milliseconds(200))
+                guard !Task.isCancelled else { return }
+            }
+            hasHighlighted = true
             // Plain output (a tool's stdout, say) gets its web addresses linked instead of colors.
             highlighted = await Highlighter.highlight(code, language: language, theme: theme, dark: colorScheme == .dark)
                 ?? (language == nil ? Links.linkified(code) : nil)
@@ -263,9 +270,20 @@ struct CodeBlockView: View {
 
 enum Highlighter {
     private static let highlight = Highlight()
+    /// Lazy stacks rebuild rows scrolled back into view; their code shouldn't go back through highlight.js.
+    private static var cache: [String: AttributedString] = [:]
 
     static func highlight(_ code: String, language: String?, theme: HighlightTheme, dark: Bool) async -> AttributedString? {
         guard let language, !language.isEmpty, code.utf8.count < 100_000 else { return nil }
+        let key = "\(theme.rawValue)|\(dark)|\(language)|\(code)"
+        if let cached = cache[key] { return cached }
+        let result = await colored(code, language: language, theme: theme, dark: dark)
+        if cache.count > 300 { cache.removeAll() }
+        cache[key] = result
+        return result
+    }
+
+    private static func colored(_ code: String, language: String, theme: HighlightTheme, dark: Bool) async -> AttributedString? {
         let colors: HighlightColors = dark ? .dark(theme) : .light(theme)
         guard var result = try? await highlight.request(code, mode: .languageAlias(language), colors: colors).attributedText
         else { return nil }
