@@ -20,10 +20,18 @@ struct ContentView: View {
                 }
             }
             .background(Color.transcript(darkness: darkness))
-            // The toolbar's own gray would band the top of a darkened page, so it takes the page's color.
-            // Opaque, not hidden: hidden let the transcript scroll up behind the title.
-            .toolbarBackground(Color.transcript(darkness: darkness), for: .windowToolbar)
-            .toolbarBackgroundVisibility(colorScheme == .dark && darkness > 0 ? .visible : .automatic, for: .windowToolbar)
+            // The toolbar's own gray would band the top of a darkened page, so it's hidden and the page shows
+            // through. The window toolbar spans the sidebar too, so rather than paint it, an opaque strip covers
+            // just this column's title area, which keeps the transcript from scrolling up behind the title.
+            .toolbarBackgroundVisibility(darkened ? .hidden : .automatic, for: .windowToolbar)
+            .overlay(alignment: .top) {
+                if darkened {
+                    Color.clear
+                        .frame(height: 0)
+                        .background(Color.transcript(darkness: darkness), ignoresSafeAreaEdges: .top)
+                        .allowsHitTesting(false)
+                }
+            }
         }
         #if DEBUG
         // HYPERCODE_OPEN_SETTINGS=1 opens Settings at launch, for checking it by eye.
@@ -32,6 +40,8 @@ struct ContentView: View {
         }
         #endif
     }
+
+    private var darkened: Bool { colorScheme == .dark && darkness > 0 }
 }
 
 struct Sidebar: View {
