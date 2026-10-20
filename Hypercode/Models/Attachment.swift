@@ -105,6 +105,27 @@ final class Draft {
         return true
     }
 
+    /// Takes a drag: Finder files arrive as file URLs; images dragged from a browser or Photos arrive as data.
+    func drop(from pasteboard: NSPasteboard) -> Bool {
+        let urls = pasteboard.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL] ?? []
+        if !urls.isEmpty {
+            add(urls)
+            return true
+        }
+        guard let data = pasteboard.data(forType: .png) ?? pasteboard.data(forType: .tiff)
+                ?? pasteboard.data(forType: NSPasteboard.PasteboardType(UTType.image.identifier)),
+              let attachment = Attachment.image(data, name: "Dropped Image")
+        else { return false }
+        attachments.append(attachment)
+        return true
+    }
+
+    /// Whether a drag carries something worth attaching, rather than text for the field.
+    static func canDrop(_ pasteboard: NSPasteboard) -> Bool {
+        pasteboard.canReadObject(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true])
+            || pasteboard.availableType(from: [.png, .tiff, NSPasteboard.PasteboardType(UTType.image.identifier)]) != nil
+    }
+
     func clear() {
         text = ""
         attachments = []

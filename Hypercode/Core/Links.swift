@@ -1,5 +1,4 @@
 import AppKit
-import SwiftUI
 
 /// Turns URLs and file references in transcript text into links, and opens them.
 enum Links {
@@ -9,17 +8,16 @@ enum Links {
     private static let detector = try? NSDataDetector(types: NSTextCheckingResult.CheckingType.link.rawValue)
 
     /// Plain text with its bare web URLs made clickable.
-    static func linkified(_ text: String) -> AttributedString {
-        var result = AttributedString(text)
+    static func linkified(_ text: String, attributes: [NSAttributedString.Key: Any]) -> NSMutableAttributedString {
+        let result = NSMutableAttributedString(string: text, attributes: attributes)
         guard let detector, text.contains("http") || text.contains("www.") else { return result }
-        for match in detector.matches(in: text, range: NSRange(text.startIndex..., in: text)) {
+        let ns = text as NSString
+        for match in detector.matches(in: text, range: NSRange(location: 0, length: ns.length)) {
             // The detector also takes "Package.swift" for a domain; only explicit web addresses count.
-            guard let url = match.url, let range = Range(match.range, in: text),
-                  ["http://", "https://", "www."].contains(where: text[range].lowercased().hasPrefix),
-                  let lower = AttributedString.Index(range.lowerBound, within: result),
-                  let upper = AttributedString.Index(range.upperBound, within: result)
+            guard let url = match.url,
+                  ["http://", "https://", "www."].contains(where: ns.substring(with: match.range).lowercased().hasPrefix)
             else { continue }
-            result[lower..<upper].link = url
+            result.addAttribute(.link, value: url, range: match.range)
         }
         return result
     }
@@ -62,23 +60,20 @@ enum Links {
     }
 
     /// Files open in their default app and folders in Finder; everything else goes to the system.
-    static func open(_ url: URL, root: URL?) -> OpenURLAction.Result {
-        guard url.scheme == fileScheme else { return .systemAction }
+    static func open(_ url: URL, root: URL?) {
+        guard url.scheme == fileScheme else {
+            NSWorkspace.shared.open(url)
+            return
+        }
         let reference = URLComponents(url: url, resolvingAgainstBaseURL: false)?.path ?? ""
         guard let file = resolve(reference, root: root) else {
             NSSound.beep()
-            return .handled
+            return
         }
         var isDirectory: ObjCBool = false
         FileManager.default.fileExists(atPath: file.path, isDirectory: &isDirectory)
         if isDirectory.boolValue || !NSWorkspace.shared.open(file) {
             NSWorkspace.shared.activateFileViewerSelecting([file])
         }
-        return .handled
     }
-}
-
-extension EnvironmentValues {
-    /// The session's project folder, for resolving file references in the transcript.
-    @Entry var projectRoot: URL?
 }

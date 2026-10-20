@@ -13,14 +13,27 @@ final class Session: Identifiable {
     var queue: [QueuedMessage] = []
     /// Set by Stop so an interrupted turn doesn't immediately roll into the queue.
     var isQueuePaused = false
+    /// What the CLI says it's doing besides answering, like "Compacting conversation…".
+    var status: String?
+    /// How full the context window was after the latest reply; nil until there is one, and after a compaction.
+    var contextTokens: Int?
+    /// The size of the model's context window, as the CLI reports it at the end of each turn.
+    var contextWindow: Int?
+
+    /// The `system/init` event of every process, which knows which commands only work in a terminal.
+    static var didInitialize: (JSON) -> Void = { _ in }
 
     private var hasHistory: Bool
     private var isLoaded: Bool
     private var process: ClaudeProcess?
     private var messageID = ""
+    /// The model the CLI resolved for this process, which keys its per-model usage.
+    private var model: String?
     private var blockEntries: [Int: Int] = [:]
     private var pendingThinking: [Int: String] = [:]
     private var toolEntries: [String: Int] = [:]
+    /// Messages whose text arrived as stream deltas; the rest (command output) only come whole.
+    private var streamedMessages: Set<String> = []
 
     init(project: Project, title: String) {
         id = UUID().uuidString.lowercased()
@@ -44,16 +57,22 @@ final class Session: Identifiable {
         guard !isLoaded else { return }
         isLoaded = true
         let file = Transcript.file(for: project.url, session: id)
-        entries = await Task.detached { Transcript.entries(at: file) }.value
+        (entries, contextTokens) = await Task.detached { Transcript.entries(at: file) }.value
         reindexTools()
     }
 
-    func send(_ text: String, attachments: [Attachment] = [], config: RunConfig) {
+    /// `isCommand` marks a slash command, which the CLI runs instead of handing to Claude.
+    func send(_ text: String, attachments: [Attachment] = [], config: RunConfig, isCommand: Bool = false) {
         if isRunning {
-            queue.append(QueuedMessage(text: text, attachments: attachments, config: config))
+            queue.append(QueuedMessage(text: text, attachments: attachments, config: config, isCommand: isCommand))
             return
         }
-        start(text, attachments: attachments, config: config)
+        start(text, attachments: attachments, config: config, isCommand: isCommand)
+    }
+
+    /// A note from the app, shown in the transcript but never sent to Claude.
+    func appendNotice(_ text: String) {
+        append(.notice, text)
     }
 
     /// Sends a queued message right away, interrupting the current turn if there is one.
@@ -61,7 +80,7 @@ final class Session: Identifiable {
         queue.removeAll { $0.id == message.id }
         if isRunning { stop() }
         isQueuePaused = false
-        start(message.text, attachments: message.attachments, config: message.config)
+        start(message.text, attachments: message.attachments, config: message.config, isCommand: message.isCommand)
     }
 
     func resumeQueue() {
@@ -72,13 +91,13 @@ final class Session: Identifiable {
     private func flushQueue() {
         guard !isRunning, !isQueuePaused, !queue.isEmpty else { return }
         let next = queue.removeFirst()
-        start(next.text, attachments: next.attachments, config: next.config)
+        start(next.text, attachments: next.attachments, config: next.config, isCommand: next.isCommand)
     }
 
-    private func start(_ text: String, attachments: [Attachment], config: RunConfig) {
+    private func start(_ text: String, attachments: [Attachment], config: RunConfig, isCommand: Bool) {
         let files = attachments.compactMap { if case .file(let url) = $0.kind { url } else { nil } }
         entries.append(Entry(
-            id: UUID().uuidString, kind: .user, text: text,
+            id: UUID().uuidString, kind: isCommand ? .command : .user, text: text,
             images: attachments.compactMap(\.imageData), files: files.map(\.lastPathComponent)
         ))
         let content = Self.content(text: text, attachments: attachments, files: files, root: project.url)
@@ -104,6 +123,7 @@ final class Session: Identifiable {
                 self.append(.error, stderr.isEmpty ? "Claude exited with status \(status)." : stderr)
             }
             self.isRunning = false
+            self.status = nil
             self.flushQueue()
         }
         do {
@@ -122,6 +142,7 @@ final class Session: Identifiable {
         process?.interrupt()
         process = nil
         isRunning = false
+        status = nil
         isQueuePaused = !queue.isEmpty
     }
 
@@ -147,11 +168,24 @@ final class Session: Identifiable {
     private func handle(_ event: JSON) {
         switch event["type"]?.string {
         case "stream_event":
-            if let e = event["event"] { handleStream(e) }
+            if let e = event["event"] { handleStream(e, isSubagent: event["parent_tool_use_id"]?.string != nil) }
+        case "system":
+            handleSystem(event)
         case "assistant":
-            for block in event["message"]?["content"]?.array ?? [] where block["type"]?.string == "tool_use" {
-                guard let id = block["id"]?.string else { continue }
-                upsertTool(id: id, name: block["name"]?.string ?? "Tool").map { entries[$0].tool?.input = block["input"] }
+            let message = event["message"]
+            let messageID = message?["id"]?.string ?? ""
+            let isSynthetic = message?["model"]?.string == "<synthetic>"
+            for (i, block) in (message?["content"]?.array ?? []).enumerated() {
+                switch block["type"]?.string {
+                case "tool_use":
+                    guard let id = block["id"]?.string else { continue }
+                    upsertTool(id: id, name: block["name"]?.string ?? "Tool").map { entries[$0].tool?.input = block["input"] }
+                case "text" where isSynthetic || !streamedMessages.contains(messageID):
+                    // Built-in commands answer with a whole message that never streams.
+                    guard let text = block["text"]?.string, !text.isEmpty else { continue }
+                    entries.append(Entry(id: "\(messageID)-\(i)", kind: isSynthetic ? .notice : .assistant, text: text))
+                default: break
+                }
             }
         case "user":
             for block in event["message"]?["content"]?.array ?? [] where block["type"]?.string == "tool_result" {
@@ -161,8 +195,13 @@ final class Session: Identifiable {
             }
         case "result":
             isRunning = false
+            status = nil
             if event["is_error"]?.bool == true {
-                append(.error, event["result"]?.string ?? "Something went wrong.")
+                let errors = (event["errors"]?.array ?? []).compactMap(\.string)
+                append(.error, event["result"]?.string ?? (errors.isEmpty ? "Something went wrong." : errors.joined(separator: "\n")))
+            }
+            if let model, let window = event["modelUsage"]?[model]?["contextWindow"], case .number(let n) = window {
+                contextWindow = Int(n)
             }
             refreshTitle()
             flushQueue()
@@ -171,10 +210,16 @@ final class Session: Identifiable {
         }
     }
 
-    private func handleStream(_ e: JSON) {
+    private func handleStream(_ e: JSON, isSubagent: Bool) {
+        // Subagents have their own context; only the main conversation's counts.
+        if !isSubagent, let usage = e["usage"] ?? e["message"]?["usage"],
+           e["type"]?.string == "message_start" || e["type"]?.string == "message_delta" {
+            contextTokens = Transcript.contextTokens(usage)
+        }
         switch e["type"]?.string {
         case "message_start":
             messageID = e["message"]?["id"]?.string ?? UUID().uuidString
+            streamedMessages.insert(messageID)
             blockEntries = [:]
             pendingThinking = [:]
         case "content_block_start":
@@ -201,6 +246,24 @@ final class Session: Identifiable {
             }
             guard let index = blockEntries[Int(i)] else { return }
             entries[index].text += text
+        default:
+            break
+        }
+    }
+
+    private func handleSystem(_ event: JSON) {
+        switch event["subtype"]?.string {
+        case "init":
+            model = event["model"]?.string
+            Self.didInitialize(event)
+        case "status":
+            status = event["status"]?.string.map { $0 == "compacting" ? "Compacting conversation…" : $0.capitalized + "…" }
+        case "compact_boundary":
+            status = nil
+            contextTokens = nil
+            append(.notice, "Conversation compacted")
+        case "session_title_changed":
+            if let title = event["title"]?.string, !title.isEmpty { self.title = title }
         default:
             break
         }
@@ -235,4 +298,5 @@ struct QueuedMessage: Identifiable {
     var text: String
     var attachments: [Attachment]
     let config: RunConfig
+    var isCommand = false
 }

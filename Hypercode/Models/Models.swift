@@ -56,7 +56,9 @@ nonisolated struct ToolCall: Sendable {
 }
 
 nonisolated struct Entry: Identifiable, Sendable {
-    enum Kind: Sendable { case user, assistant, thinking, tool, error }
+    /// `command` is a slash command the user ran ("/context"); `notice` is what a command printed,
+    /// or a note from the app or harness ("Conversation compacted").
+    enum Kind: Sendable { case user, assistant, thinking, tool, error, command, notice }
 
     let id: String
     var kind: Kind
@@ -64,6 +66,23 @@ nonisolated struct Entry: Identifiable, Sendable {
     var tool: ToolCall?
     var images: [Data] = []
     var files: [String] = []
+}
+
+extension Entry {
+    /// Cheap fingerprint of everything a row draws, so the transcript redraws only rows that changed.
+    var revision: Int {
+        var hasher = Hasher()
+        hasher.combine(kind)
+        hasher.combine(text.utf8.count)
+        hasher.combine(images.count)
+        hasher.combine(files.count)
+        if let tool {
+            hasher.combine(tool.input != nil)
+            hasher.combine(tool.result?.utf8.count ?? -1)
+            hasher.combine(tool.isError)
+        }
+        return hasher.finalize()
+    }
 }
 
 nonisolated struct SessionSummary: Sendable {
@@ -138,4 +157,58 @@ struct RunConfig: Equatable {
     /// Nil for a model that takes no effort level.
     var effort: Effort?
     var mode: PermissionMode
+}
+
+/// A slash command as the CLI's `initialize` reply lists it: built-ins, skills, plugin and project commands.
+nonisolated struct SlashCommand: Identifiable, Hashable, Codable, Sendable {
+    let name: String
+    var description = ""
+    var argumentHint = ""
+    var aliases: [String] = []
+    var isBuiltin = false
+
+    var id: String { name }
+    var takesArguments: Bool { !argumentHint.isEmpty }
+
+    init(name: String, description: String = "", argumentHint: String = "", aliases: [String] = [], isBuiltin: Bool = true) {
+        self.name = name
+        self.description = description
+        self.argumentHint = argumentHint
+        self.aliases = aliases
+        self.isBuiltin = isBuiltin
+    }
+
+    init?(_ json: JSON) {
+        guard let name = json["name"]?.string, !name.hasPrefix("__") else { return nil }
+        let description = json["description"]?.string ?? ""
+        // Tombstones the CLI keeps for muscle memory.
+        if description.hasPrefix("(removed)") || description.hasPrefix("Renamed to") { return nil }
+        self.name = name
+        self.description = description.components(separatedBy: "\n").first ?? description
+        argumentHint = json["argumentHint"]?.string ?? ""
+        aliases = (json["aliases"]?.array ?? []).compactMap(\.string)
+        isBuiltin = json["builtin"]?.bool ?? false
+    }
+
+    func matches(_ name: String) -> Bool {
+        self.name == name || aliases.contains(name)
+    }
+
+    /// Commands the app runs itself, merged in when the CLI doesn't list them.
+    static let appCommands: [SlashCommand] = [
+        SlashCommand(name: "help", description: "Show every command and skill you can run here"),
+        SlashCommand(name: "resume", description: "Find an earlier session in the sidebar", aliases: ["continue"]),
+    ]
+
+    /// Until the CLI has answered once for a project.
+    static let fallback: [SlashCommand] = appCommands + [
+        SlashCommand(name: "clear", description: "Start a new session with empty context", aliases: ["reset", "new"]),
+        SlashCommand(name: "compact", description: "Free up context by summarizing the conversation so far", argumentHint: "<optional custom summarization instructions>"),
+        SlashCommand(name: "context", description: "Show current context usage"),
+        SlashCommand(name: "model", description: "Set the AI model for Claude Code", argumentHint: "<model>"),
+        SlashCommand(name: "effort", description: "Set effort level for model usage", argumentHint: "<low|medium|high|xhigh|max>"),
+        SlashCommand(name: "rename", description: "Rename the current conversation", argumentHint: "[name]", aliases: ["name"]),
+        SlashCommand(name: "usage", description: "Show session cost, plan usage, and what's contributing to your limits", aliases: ["cost", "stats"]),
+        SlashCommand(name: "init", description: "Initialize a new CLAUDE.md file with codebase documentation"),
+    ]
 }

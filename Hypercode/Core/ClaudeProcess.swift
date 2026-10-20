@@ -74,14 +74,14 @@ final class ClaudeProcess {
         if process.isRunning { process.terminate() }
     }
 
-    /// The models `/model` offers, read from the `initialize` reply of a throwaway process.
-    /// Nil when claude can't be run or doesn't answer within 20 seconds.
-    nonisolated static func models(claude: URL, environment: [String: String]) -> [ModelOption]? {
+    /// The CLI's `initialize` reply from a throwaway process in `cwd`: the models `/model` offers and
+    /// every slash command and skill available there. Nil when claude can't be run or doesn't answer within 20 seconds.
+    nonisolated static func initialize(claude: URL, environment: [String: String], cwd: URL) -> JSON? {
         let process = Process(), input = Pipe(), output = Pipe()
         process.executableURL = claude
         process.arguments = ["-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose", "--no-session-persistence"]
         process.environment = environment
-        process.currentDirectoryURL = FileManager.default.homeDirectoryForCurrentUser
+        process.currentDirectoryURL = cwd
         process.standardInput = input
         process.standardOutput = output
         process.standardError = FileHandle.nullDevice
@@ -89,14 +89,13 @@ final class ClaudeProcess {
         defer { if process.isRunning { process.terminate() } }
         DispatchQueue.global().asyncAfter(deadline: .now() + 20) { if process.isRunning { process.terminate() } }
 
-        let request = #"{"type":"control_request","request_id":"models","request":{"subtype":"initialize"}}"# + "\n"
+        let request = #"{"type":"control_request","request_id":"init","request":{"subtype":"initialize"}}"# + "\n"
         try? input.fileHandleForWriting.write(contentsOf: Data(request.utf8))
         let lines = LineBuffer()
         while case let data = output.fileHandleForReading.availableData, !data.isEmpty {
             for line in lines.append(data) {
                 guard let event = JSON.parse(line), event["type"]?.string == "control_response" else { continue }
-                let models = (event["response"]?["response"]?["models"]?.array ?? []).compactMap(ModelOption.init)
-                return models.isEmpty ? nil : models
+                return event["response"]?["response"]
             }
         }
         return nil

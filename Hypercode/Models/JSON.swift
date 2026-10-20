@@ -31,8 +31,22 @@ nonisolated enum JSON: Sendable, Codable, Equatable {
         }
     }
 
+    /// JSONSerialization is several times faster than decoding this enum with JSONDecoder,
+    /// which matters for stream events and multi-megabyte transcripts.
     static func parse(_ data: Data) -> JSON? {
-        try? JSONDecoder().decode(JSON.self, from: data)
+        guard let object = try? JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed]) else { return nil }
+        return JSON(any: object)
+    }
+
+    private init(any: Any) {
+        switch any {
+        case let s as String: self = .string(s)
+        case let n as NSNumber:
+            self = CFGetTypeID(n) == CFBooleanGetTypeID() ? .bool(n.boolValue) : .number(n.doubleValue)
+        case let a as [Any]: self = .array(a.map(JSON.init(any:)))
+        case let o as [String: Any]: self = .object(o.mapValues(JSON.init(any:)))
+        default: self = .null
+        }
     }
 
     subscript(key: String) -> JSON? {
