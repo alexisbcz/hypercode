@@ -153,7 +153,7 @@ nonisolated enum Transcript {
         private let slots: UnsafeMutableBufferPointer<[JSON]>
         init(count: Int) {
             slots = .allocate(capacity: count)
-            _ = slots.initialize(repeating: [])
+            slots.initialize(repeating: [])
         }
         deinit {
             slots.deinitialize()

@@ -7,11 +7,11 @@ struct UsageMenuLabel: View {
     let monitor: UsageMonitor
 
     var body: some View {
-        Image(nsImage: Self.glyph(days: monitor.days, percent: monitor.session?.percent))
+        Image(nsImage: glyph)
     }
 
-    static func glyph(days: [UsageMonitor.Day], percent: Double?) -> NSImage {
-        let renderer = ImageRenderer(content: Glyph(days: days, percent: percent))
+    private var glyph: NSImage {
+        let renderer = ImageRenderer(content: Glyph(days: monitor.days, percent: monitor.session?.percent))
         renderer.scale = 2
         let image = renderer.nsImage ?? NSImage()
         image.isTemplate = true
@@ -44,7 +44,7 @@ struct UsageMenuLabel: View {
 
 struct UsageMenu: View {
     let monitor: UsageMonitor
-    var openApp: () -> Void = {}
+    @Environment(\.openWindow) private var openWindow
     @State private var selectedDay: Date?
 
     var body: some View {
@@ -75,7 +75,10 @@ struct UsageMenu: View {
             Divider()
 
             HStack {
-                Button("Open Hypercode", action: openApp)
+                Button("Open Hypercode") {
+                    openWindow(id: "main")
+                    NSApp.activate()
+                }
                 Spacer()
                 if let updatedAt = monitor.updatedAt {
                     Text("Updated \(updatedAt, format: .relative(presentation: .named))")
