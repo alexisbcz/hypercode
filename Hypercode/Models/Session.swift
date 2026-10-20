@@ -124,6 +124,7 @@ final class Session: Identifiable {
             }
             self.isRunning = false
             self.status = nil
+            self.settlePendingTools()
             self.flushQueue()
         }
         do {
@@ -144,6 +145,7 @@ final class Session: Identifiable {
         isRunning = false
         status = nil
         isQueuePaused = !queue.isEmpty
+        settlePendingTools()
     }
 
     /// Images become base64 image blocks; other files are referenced by path for Claude to read.
@@ -196,6 +198,7 @@ final class Session: Identifiable {
         case "result":
             isRunning = false
             status = nil
+            settlePendingTools()
             if event["is_error"]?.bool == true {
                 let errors = (event["errors"]?.array ?? []).compactMap(\.string)
                 append(.error, event["result"]?.string ?? (errors.isEmpty ? "Something went wrong." : errors.joined(separator: "\n")))
@@ -274,6 +277,14 @@ final class Session: Identifiable {
         toolEntries[id] = entries.count
         entries.append(Entry(id: id, kind: .tool, tool: ToolCall(name: name)))
         return entries.count - 1
+    }
+
+    /// Once a turn ends, a tool that never got a result was cut off; stop showing it as running.
+    private func settlePendingTools() {
+        for i in toolEntries.values where i < entries.count && entries[i].kind == .tool && entries[i].tool?.result == nil {
+            entries[i].tool?.result = "Interrupted"
+            entries[i].tool?.isError = true
+        }
     }
 
     private func append(_ kind: Entry.Kind, _ text: String) {

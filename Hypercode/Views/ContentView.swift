@@ -88,6 +88,7 @@ private struct ProjectHeader: View {
                 .buttonStyle(.borderless)
                 .padding(.trailing, 8)
         }
+        .padding(.bottom, 6)
         .contextMenu {
             Button("New Session") { store.newSession(in: project) }
             Button("Show in Finder") { NSWorkspace.shared.activateFileViewerSelecting([project.url]) }
