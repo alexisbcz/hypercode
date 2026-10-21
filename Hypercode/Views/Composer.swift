@@ -13,6 +13,13 @@ struct Composer: View {
     @State private var dictation = Dictation()
     @AppStorage(Pref.readingWidth) private var readingWidth = ReadingWidth.standard
     @AppStorage(Pref.darkness) private var darkness = Pref.defaultDarkness
+    @AppStorage(Pref.composerGlow) private var composerGlow = false
+    @Environment(\.controlActiveState) private var controlActiveState
+
+    private static let cornerRadius: CGFloat = 20
+
+    /// Only while you can type into it: a glow nobody is looking at would keep animating for nothing.
+    private var showsGlow: Bool { composerGlow && isFocused && controlActiveState != .inactive }
 
     var body: some View {
         @Bindable var store = store
@@ -56,7 +63,14 @@ struct Composer: View {
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 10)
-            .glassEffect(in: .rect(cornerRadius: 20))
+            .glassEffect(in: .rect(cornerRadius: Self.cornerRadius))
+            .background {
+                if showsGlow {
+                    ComposerGlow(cornerRadius: Self.cornerRadius)
+                        .transition(.opacity)
+                }
+            }
+            .animation(.easeInOut(duration: 0.4), value: showsGlow)
 
             if let error = dictation.error {
                 Label(error, systemImage: "mic.slash")
