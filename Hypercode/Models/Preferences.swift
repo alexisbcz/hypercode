@@ -15,6 +15,7 @@ enum Pref {
     static let readingWidth = "appearance.readingWidth"
     static let sidebarSessions = "appearance.sidebarSessions"
     static let sidebarDates = "appearance.sidebarDates"
+    static let composerGlow = "appearance.composerGlow"
     static let showThinking = "conversation.showThinking"
     static let expandThinking = "conversation.expandThinking"
     static let showTools = "conversation.showTools"
@@ -30,7 +31,7 @@ enum Pref {
 
     /// Back to how the app looks out of the box.
     static func resetAppearance() {
-        for key in [theme, accent, darkness, darkSidebar, textSize, codeTheme, bubbleStyle, density, readingWidth, sidebarSessions, sidebarDates] {
+        for key in [theme, accent, darkness, darkSidebar, textSize, codeTheme, bubbleStyle, density, readingWidth, sidebarSessions, sidebarDates, composerGlow] {
             UserDefaults.standard.removeObject(forKey: key)
         }
     }

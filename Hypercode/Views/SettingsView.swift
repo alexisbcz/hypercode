@@ -196,6 +196,7 @@ private struct AppearanceSettings: View {
     @AppStorage(Pref.readingWidth) private var readingWidth = ReadingWidth.standard
     @AppStorage(Pref.sidebarSessions) private var sidebarSessions = 5
     @AppStorage(Pref.sidebarDates) private var sidebarDates = true
+    @AppStorage(Pref.composerGlow) private var composerGlow = false
 
     var body: some View {
         Form {
@@ -269,6 +270,15 @@ private struct AppearanceSettings: View {
                     ForEach(ReadingWidth.allCases) { Text($0.label).tag($0) }
                 }
                 .pickerStyle(.segmented)
+            }
+
+            Section {
+                Toggle("Glow while typing", isOn: $composerGlow)
+            } header: {
+                Text("Message Box")
+            } footer: {
+                Text("A soft, slowly shifting rainbow halo around the box while it has focus. It stays still if Reduce Motion is on.")
+                    .foregroundStyle(.secondary)
             }
 
             Section("Sidebar") {
