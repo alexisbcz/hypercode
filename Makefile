@@ -9,4 +9,7 @@ build:
 	xcodegen generate -q
 	xcodebuild -project Hypercode.xcodeproj -scheme Hypercode -derivedDataPath build -quiet build
 
-.PHONY: run build
+dmg:
+	scripts/build-dmg.sh
+
+.PHONY: run build dmg
