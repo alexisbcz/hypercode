@@ -51,6 +51,16 @@ built=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$app/Con
   echo "Error: the app says $built, expected $version." >&2
   exit 1
 }
+# Sparkle compares build numbers, which project.yml ties to the version.
+build=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$app/Contents/Info.plist")
+[[ "$build" == "$version" ]] || {
+  echo "Error: the app's build number is $build, expected $version." >&2
+  exit 1
+}
+/usr/libexec/PlistBuddy -c 'Print :SUPublicEDKey' "$app/Contents/Info.plist" >/dev/null 2>&1 || {
+  echo "Error: the app has no SUPublicEDKey, so it couldn't verify updates." >&2
+  exit 1
+}
 codesign --verify --deep --strict "$app"
 
 # The usual drag-to-install layout: the app next to a shortcut to /Applications.

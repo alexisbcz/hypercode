@@ -43,8 +43,22 @@ jobs:
             build/Hypercode-*.dmg
             build/Hypercode-*.dmg.sha256
 
-      - name: Publish the release
+      # A draft first, so the app never sees a latest release without its appcast.
+      - name: Draft the release
         if: github.ref_type == 'tag'
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "$GITHUB_REF_NAME" build/Hypercode-*.dmg build/Hypercode-*.dmg.sha256 --title "Hypercode ${GITHUB_REF_NAME#v}" --generate-notes
+        run: gh release create "$GITHUB_REF_NAME" build/Hypercode-*.dmg build/Hypercode-*.dmg.sha256 --title "Hypercode ${GITHUB_REF_NAME#v}" --generate-notes --draft
+
+      # Signs the DMG with the key from Sparkle's generate_keys (`generate_keys -x key.txt` exports it).
+      - name: Publish the appcast
+        if: github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
+        run: |
+          [[ -n "$SPARKLE_PRIVATE_KEY" ]] || { echo "::error::The SPARKLE_PRIVATE_KEY secret isn't set."; exit 1; }
+          gh release view "$GITHUB_REF_NAME" --json body --jq .body >build/notes.md
+          scripts/build-appcast.sh build/Hypercode-*.dmg build/notes.md
+          gh release upload "$GITHUB_REF_NAME" build/appcast.xml
+          gh release edit "$GITHUB_REF_NAME" --draft=false --latest

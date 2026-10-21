@@ -262,7 +262,7 @@ main() {
   after_install
   ((cli)) && link_cli "$dest/$APP_NAME.app"
 
-  printf '\n%s%s is installed.%s Update it by running this script again.\n\n' "$GREEN$BOLD" "$APP_NAME" "$RESET"
+  printf '\n%s%s is installed.%s It updates itself from new releases.\n\n' "$GREEN$BOLD" "$APP_NAME" "$RESET"
   ((open)) && open "$dest/$APP_NAME.app"
   return 0
 }

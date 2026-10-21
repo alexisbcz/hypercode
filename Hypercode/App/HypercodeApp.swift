@@ -16,6 +16,10 @@ struct HypercodeApp: App {
                 .frame(minWidth: 760, minHeight: 480)
         }
         .commands {
+            CommandGroup(after: .appInfo) {
+                Button("Check for Updates…") { Updater.shared.checkForUpdates() }
+                    .disabled(!Updater.shared.canCheck)
+            }
             CommandGroup(replacing: .newItem) {
                 Button("New Session") { store.newSession() }
                     .keyboardShortcut("n")

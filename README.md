@@ -22,6 +22,8 @@ xattr -dr com.apple.quarantine /Applications/Hypercode.app
 
 To get the `hypercode` command, use **Hypercode › Install ‘hypercode’ Command in PATH**.
 
+Hypercode updates itself: it checks for a new release once a day and asks before installing it. Check by hand with **Hypercode › Check for Updates…**, or let it install updates in the background under **Settings › General › Updates**.
+
 ### Build from source
 
 ```sh
@@ -29,5 +31,18 @@ curl -fsSL https://raw.githubusercontent.com/alexisbcz/hypercode/main/install.sh
 ```
 
 It also links a `hypercode` command into your PATH, so `hypercode .` opens the folder you're in, like VS Code's `code .`. To add it later, use **Hypercode › Install ‘hypercode’ Command in PATH**.
+
+## Releasing
+
+1. Set `MARKETING_VERSION` in `project.yml` to the new version, so builds from source know which release they match.
+2. Tag it and push the tag:
+
+   ```sh
+   git tag v0.2.0 && git push origin v0.2.0
+   ```
+
+The Release workflow builds the DMG, signs it for Sparkle, and publishes it with an `appcast.xml`, which installed copies read from the latest release. Signing needs the `SPARKLE_PRIVATE_KEY` repository secret, the private half of the `SUPublicEDKey` in `Hypercode/Info.plist`. Sparkle's `generate_keys` (in `build/SourcePackages/artifacts/sparkle/Sparkle/bin` after a build) keeps it in your keychain; `generate_keys -x key.txt` exports it. Keep a backup: without it, installed copies can't take updates.
+
+`make dmg` builds the same DMG locally.
 
 [MIT License](LICENSE)

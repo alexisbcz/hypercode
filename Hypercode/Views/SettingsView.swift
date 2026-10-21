@@ -127,6 +127,7 @@ private struct GeneralSettings: View {
             }
 
             CommandLineSection()
+            UpdatesSection()
         }
         .formStyle(.grouped)
         .frame(width: 560)
@@ -185,6 +186,36 @@ private struct CommandLineSection: View {
             self.error = error.localizedDescription
         }
         status = CommandLineTool.status
+    }
+}
+
+/// Sparkle's update preferences, and a way to check now.
+private struct UpdatesSection: View {
+    @State private var updater = Updater.shared
+
+    var body: some View {
+        Section {
+            Toggle("Check for updates automatically", isOn: $updater.checksAutomatically)
+            Toggle("Download and install updates in the background", isOn: $updater.installsAutomatically)
+                .disabled(!updater.checksAutomatically)
+            LabeledContent("Version \(Updater.version)") {
+                Button("Check Now") { updater.checkForUpdates() }
+                    .disabled(!updater.canCheck)
+            }
+        } header: {
+            Text("Updates")
+        } footer: {
+            Group {
+                if !Updater.isEnabled {
+                    Text("Debug builds don't update themselves.")
+                } else if let date = updater.lastChecked {
+                    Text("Last checked \(date.formatted(.relative(presentation: .named))).")
+                } else {
+                    Text("Hypercode checks GitHub for a new release once a day.")
+                }
+            }
+            .foregroundStyle(.secondary)
+        }
     }
 }
 
