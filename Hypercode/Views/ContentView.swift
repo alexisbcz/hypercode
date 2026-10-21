@@ -75,6 +75,8 @@ struct Sidebar: View {
                 }
             }
         }
+        // Room between the search field and the first project.
+        .contentMargins(.top, 10, for: .scrollContent)
         .modifier(SidebarDarkening())
         .searchable(text: $search, placement: .sidebar, prompt: "Search")
         .overlay {
