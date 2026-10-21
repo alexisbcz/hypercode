@@ -15,6 +15,12 @@ struct SettingsView: View {
             Tab("Appearance", systemImage: "paintpalette", value: "appearance") {
                 AppearanceSettings()
             }
+            Tab("Claude Code", systemImage: "terminal", value: "claude") {
+                ClaudeCodeSettings()
+            }
+            Tab("Instructions", systemImage: "text.document", value: "instructions") {
+                InstructionsSettings()
+            }
         }
         .modifier(AppAppearance())
     }

@@ -121,6 +121,12 @@ final class Store {
         return listed + extra
     }
 
+    /// After a command or skill changes on disk: lists commands again for every project listed so far.
+    func refreshCommands() {
+        loadingCommands.removeAll()
+        for project in projects where commands[project.id] != nil { loadCommands(for: project) }
+    }
+
     /// Asks the CLI (once per launch per project) which commands and models are available there.
     func loadCommands(for project: Project?) {
         let key = project?.id ?? "~"

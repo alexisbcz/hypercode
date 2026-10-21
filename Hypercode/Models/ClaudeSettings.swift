@@ -83,6 +83,10 @@ final class SettingsFile {
     subscript(path: String...) -> OrderedJSON? { root.value(at: path) }
 
     func set(_ value: OrderedJSON?, at path: String...) {
+        set(value, at: path)
+    }
+
+    func set(_ value: OrderedJSON?, at path: [String]) {
         reload()
         guard problem == nil else { return }
         var updated = root
