@@ -1,0 +1,50 @@
+# Builds the Hypercode DMG.
+#
+# Pushing a version tag publishes it as a GitHub Release:
+#
+#   git tag v0.1.0 && git push origin v0.1.0
+#
+# Running the workflow by hand only builds it, and attaches the DMG to the run.
+
+name: Release
+
+on:
+  push:
+    tags: ["v[0-9]+.[0-9]+.[0-9]+"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  dmg:
+    # The code needs Xcode 27, which only this runner image has.
+    runs-on: xcode-27
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_27.0.app/Contents/Developer
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install XcodeGen
+        run: brew install --quiet xcodegen
+
+      - name: Build the DMG
+        run: |
+          if [[ "$GITHUB_REF_TYPE" == tag ]]; then
+            scripts/build-dmg.sh "$GITHUB_REF_NAME"
+          else
+            scripts/build-dmg.sh
+          fi
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: Hypercode-dmg
+          path: |
+            build/Hypercode-*.dmg
+            build/Hypercode-*.dmg.sha256
+
+      - name: Publish the release
+        if: github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" build/Hypercode-*.dmg build/Hypercode-*.dmg.sha256 --title "Hypercode ${GITHUB_REF_NAME#v}" --generate-notes
