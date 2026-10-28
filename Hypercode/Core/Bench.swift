@@ -46,8 +46,9 @@ enum Bench {
 }
 
 extension Bench {
-    /// HYPERCODE_TTS_FILE=<out.wav> synthesizes a sample reply with Pocket TTS, writes it as a WAV,
-    /// prints load and generation times against the audio's length, and quits. Nothing is played.
+    /// HYPERCODE_TTS_FILE=<out.wav> synthesizes a sample reply with Pocket TTS (or LFM3-Audio, with
+    /// HYPERCODE_TTS_ENGINE=lfm3), writes it as a WAV, prints load and generation times against the audio's
+    /// length, and quits. Nothing is played.
     static func synthesizeIfRequested() {
         guard let path = ProcessInfo.processInfo.environment["HYPERCODE_TTS_FILE"] else { return }
         let text = Speaker.spokenText("""
@@ -55,15 +56,19 @@ extension Bench {
 
         I reused the data the service already fetches, so there's no extra network call. All twenty-four tests pass.
         """)
+        let lfm3 = ProcessInfo.processInfo.environment["HYPERCODE_TTS_ENGINE"] == "lfm3"
         Task {
             do {
                 let start = Date()
-                let sampleRate = try await PocketVoice.shared.load()
+                let sampleRate = lfm3 ? LFM3Audio.outputSampleRate : try await PocketVoice.shared.load()
+                if lfm3 { try await LFM3Audio.shared.prepare() }
                 let loaded = Date()
                 var samples: [Float] = []
                 var firstChunk: TimeInterval?
                 for chunk in Speaker.chunks(of: text) {
-                    samples += try await PocketVoice.shared.synthesize(chunk, voice: "alba")
+                    samples += lfm3
+                        ? try await LFM3Audio.shared.synthesize(chunk, voice: "female", language: "en")
+                        : try await PocketVoice.shared.synthesize(chunk, voice: "alba")
                     if firstChunk == nil { firstChunk = Date().timeIntervalSince(loaded) }
                 }
                 let generation = Date().timeIntervalSince(loaded)
@@ -79,6 +84,30 @@ extension Bench {
                              loaded.timeIntervalSince(start), firstChunk ?? 0, generation, seconds, seconds / generation, rms, sampleRate))
             } catch {
                 print("TTS failed: \(error)")
+            }
+            exit(0)
+        }
+    }
+}
+
+extension Bench {
+    /// HYPERCODE_ASR_FILE=<in.wav> transcribes a recording with LFM3-Audio the way dictation does (resampled to
+    /// 16 kHz, then through llama-server), prints the text and how long it took, and quits. HYPERCODE_ASR_LANGUAGE
+    /// names the language; HYPERCODE_LLAMA_URL uses a running server instead of starting one.
+    static func transcribeIfRequested() {
+        guard let path = ProcessInfo.processInfo.environment["HYPERCODE_ASR_FILE"] else { return }
+        let language = ProcessInfo.processInfo.environment["HYPERCODE_ASR_LANGUAGE"]
+        Task {
+            do {
+                let file = try AVAudioFile(forReading: URL(fileURLWithPath: path))
+                let buffer = AVAudioPCMBuffer(pcmFormat: file.processingFormat, frameCapacity: AVAudioFrameCount(file.length))!
+                try file.read(into: buffer)
+                let samples = Array(UnsafeBufferPointer(start: buffer.floatChannelData![0], count: Int(buffer.frameLength)))
+                let start = Date()
+                let text = try await LFM3Audio.shared.transcribe(LFM3Audio.resampled(samples, from: file.processingFormat.sampleRate), language: language)
+                print(String(format: "ASR time=%.2fs audio=%.1fs text=", Date().timeIntervalSince(start), Double(samples.count) / file.processingFormat.sampleRate) + text)
+            } catch {
+                print("ASR failed: \(error)")
             }
             exit(0)
         }

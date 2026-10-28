@@ -40,6 +40,11 @@ private struct GeneralSettings: View {
     @AppStorage(Pref.speechAutoRead) private var speechAutoRead = false
     @AppStorage(Pref.speechEngine) private var speechEngine = SpeechEngine.pocket
     @AppStorage(Pref.pocketVoice) private var pocketVoice = PocketVoice.voices[0]
+    @AppStorage(Pref.dictationEngine) private var dictationEngine = DictationEngine.apple
+    @AppStorage(Pref.dictationLFM3Language) private var dictationLFM3Language = ""
+    @AppStorage(Pref.lfm3Voice) private var lfm3Voice = LFM3Audio.voices[0]
+    @AppStorage(Pref.lfm3Language) private var lfm3Language = "en"
+    private var lfm3: LFM3Audio { .shared }
 
     var body: some View {
         @Bindable var store = store
@@ -73,19 +78,37 @@ private struct GeneralSettings: View {
             }
 
             Section {
-                Picker("Language", selection: $dictationLocale) {
-                    Text("System Default").tag("")
-                    Divider()
-                    ForEach(Self.dictationLocales, id: \.identifier) { locale in
-                        Text(Locale.current.localizedString(forIdentifier: locale.identifier) ?? locale.identifier)
-                            .tag(locale.identifier)
+                Picker("Engine", selection: $dictationEngine) {
+                    ForEach(DictationEngine.allCases) { Text($0.label).tag($0) }
+                }
+                if dictationEngine == .lfm3 {
+                    Picker("Language", selection: $dictationLFM3Language) {
+                        Text("Detect Automatically").tag("")
+                        Divider()
+                        ForEach(LFM3Audio.dictationLanguages, id: \.self) { Text($0).tag($0) }
+                    }
+                } else {
+                    Picker("Language", selection: $dictationLocale) {
+                        Text("System Default").tag("")
+                        Divider()
+                        ForEach(Self.dictationLocales, id: \.identifier) { locale in
+                            Text(Locale.current.localizedString(forIdentifier: locale.identifier) ?? locale.identifier)
+                                .tag(locale.identifier)
+                        }
                     }
                 }
             } header: {
                 Text("Dictation")
             } footer: {
-                Text("Press ⇧⌘D in the composer to dictate. Languages your Mac supports offline are recognized on-device.")
-                    .foregroundStyle(.secondary)
+                VStack(alignment: .leading, spacing: 6) {
+                    if dictationEngine == .lfm3 {
+                        Text("Press ⇧⌘D in the composer to dictate, and again to stop: LFM3-Audio then transcribes what you said, on your Mac.")
+                        LFM3Note(download: lfm3.download)
+                    } else {
+                        Text("Press ⇧⌘D in the composer to dictate. Languages your Mac supports offline are recognized on-device.")
+                    }
+                }
+                .foregroundStyle(.secondary)
             }
 
             Section {
@@ -96,6 +119,13 @@ private struct GeneralSettings: View {
                 if speechEngine == .pocket {
                     Picker("Voice", selection: $pocketVoice) {
                         ForEach(PocketVoice.voices, id: \.self) { Text($0.capitalized).tag($0) }
+                    }
+                } else if speechEngine == .lfm3 {
+                    Picker("Voice", selection: $lfm3Voice) {
+                        ForEach(LFM3Audio.voices, id: \.self) { Text($0.capitalized).tag($0) }
+                    }
+                    Picker("Language", selection: $lfm3Language) {
+                        ForEach(LFM3Audio.speechLanguages, id: \.code) { Text($0.name).tag($0.code) }
                     }
                 } else {
                     Picker("Voice", selection: $speechVoice) {
@@ -120,10 +150,18 @@ private struct GeneralSettings: View {
             } header: {
                 Text("Speech")
             } footer: {
-                Text(speechEngine == .pocket
-                     ? "Hover a reply and click the speaker to hear it; code and tables are skipped. Pocket TTS, by Kyutai, runs on your Mac: the first use downloads its model (about 240 MB) from Hugging Face. Its voices speak English."
-                     : "Hover a reply and click the speaker to hear it; code and tables are skipped. For more natural voices, download a Premium or Enhanced one in System Settings › Accessibility › Spoken Content › System Voice › Manage Voices.")
-                    .foregroundStyle(.secondary)
+                VStack(alignment: .leading, spacing: 6) {
+                    switch speechEngine {
+                    case .pocket:
+                        Text("Hover a reply and click the speaker to hear it; code and tables are skipped. Pocket TTS, by Kyutai, runs on your Mac: the first use downloads its model (about 240 MB) from Hugging Face. Its voices speak English.")
+                    case .lfm3:
+                        Text("Hover a reply and click the speaker to hear it; code and tables are skipped. Pick the language Claude answers in.")
+                        LFM3Note(download: lfm3.download)
+                    case .system:
+                        Text("Hover a reply and click the speaker to hear it; code and tables are skipped. For more natural voices, download a Premium or Enhanced one in System Settings › Accessibility › Spoken Content › System Voice › Manage Voices.")
+                    }
+                }
+                .foregroundStyle(.secondary)
             }
 
             CommandLineSection()
@@ -136,6 +174,26 @@ private struct GeneralSettings: View {
 
     private static let dictationLocales = SFSpeechRecognizer.supportedLocales().sorted {
         (Locale.current.localizedString(forIdentifier: $0.identifier) ?? "") < (Locale.current.localizedString(forIdentifier: $1.identifier) ?? "")
+    }
+}
+
+/// Where LFM3-Audio comes from, what the first use downloads, and its licence: shown wherever it's picked.
+private struct LFM3Note: View {
+    let download: LFM3Audio.Download?
+
+    var body: some View {
+        if let download {
+            ProgressView(value: download.fraction) {
+                Text(download.label)
+            }
+            .controlSize(.small)
+        } else {
+            Text(LFM3Audio.isInstalled
+                 ? "LFM3-Audio, by Liquid AI, runs on your Mac through llama.cpp."
+                 : "LFM3-Audio, by Liquid AI, runs on your Mac through llama.cpp: the first use downloads llama.cpp (about 16 MB) from GitHub and the model (about 2.2 GB) from Hugging Face.")
+        }
+        // Built from a string so the link's address is part of the Markdown, not an interpolated argument.
+        Text(LocalizedStringKey("The model is under the [LFM Open License v1.0](\(LFM3Audio.licenseURL.absoluteString)): free to use below $10M in annual revenue, with restrictions above that."))
     }
 }
 

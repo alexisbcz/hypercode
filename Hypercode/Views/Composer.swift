@@ -49,6 +49,7 @@ struct Composer: View {
                         .symbolEffect(.pulse, isActive: dictation.isRecording)
                         .keyboardShortcut("d", modifiers: [.command, .shift])
                         .help(dictation.isRecording ? "Stop dictation (⇧⌘D)" : "Dictate (⇧⌘D)")
+                        .disabled(dictation.isTranscribing)
 
                     if isRunning {
                         ComposerButton("Stop", symbol: "stop.circle.fill", action: onStop)
@@ -72,7 +73,15 @@ struct Composer: View {
             }
             .animation(.easeInOut(duration: 0.4), value: showsGlow)
 
-            if let error = dictation.error {
+            if dictation.isTranscribing, let download = LFM3Audio.shared.download {
+                // The first LFM3-Audio dictation waits for the model.
+                Label(download.label, systemImage: "arrow.down.circle")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 10)
+            } else if let error = dictation.error {
                 Label(error, systemImage: "mic.slash")
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -119,12 +128,13 @@ struct Composer: View {
         .onAppear(perform: installPasteMonitor)
         .onDisappear {
             if let pasteMonitor { NSEvent.removeMonitor(pasteMonitor) }
-            dictation.stop()
+            dictation.stop(discarding: true)
         }
     }
 
     private var placeholder: String {
         if dictation.isRecording { return "Listening…" }
+        if dictation.isTranscribing { return "Transcribing…" }
         return isRunning ? "Queue a follow-up…" : "Ask Claude to build, fix, or explain…"
     }
 
@@ -142,7 +152,7 @@ struct Composer: View {
     }
 
     private func send() {
-        dictation.stop()
+        dictation.stop(discarding: true)
         guard !draft.isEmpty else { return }
         onSend(draft.text.trimmingCharacters(in: .whitespacesAndNewlines), draft.attachments)
         draft.clear()

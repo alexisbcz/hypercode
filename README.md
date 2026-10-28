@@ -32,6 +32,15 @@ curl -fsSL https://raw.githubusercontent.com/alexisbcz/hypercode/main/install.sh
 
 It also links a `hypercode` command into your PATH, so `hypercode .` opens the folder you're in, like VS Code's `code .`. To add it later, use **Hypercode › Install ‘hypercode’ Command in PATH**.
 
+## Voice
+
+Everything runs on your Mac. Pick the engines under **Settings › General**.
+
+- **Dictation:** press ⇧⌘D in the composer to speak a prompt. Apple's speech recognizer types as you talk; [LFM3-Audio-2B](https://huggingface.co/LiquidAI/LFM3-Audio-2B) transcribes when you stop, in 18 languages, through a `llama-server` that Hypercode starts itself.
+- **Read aloud:** replies are read with Kyutai's Pocket TTS, LFM3-Audio (male and female voices, 19 languages and accents), or the macOS voices.
+
+LFM3-Audio's first use downloads llama.cpp (about 16 MB) from its GitHub release and the model (about 2.2 GB) from Hugging Face into `~/Library/Application Support/Hypercode/LFM3`. The model is under the [LFM Open License v1.0](https://huggingface.co/LiquidAI/LFM3-Audio-2B/blob/main/LICENSE).
+
 ## Releasing
 
 1. Set `MARKETING_VERSION` in `project.yml` to the new version, so builds from source know which release they match.

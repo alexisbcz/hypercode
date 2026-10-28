@@ -5,12 +5,18 @@ import Observation
 
 /// The voice engine reading replies aloud.
 enum SpeechEngine: String, CaseIterable, Identifiable {
-    case pocket, system
+    case pocket, lfm3, system
     var id: String { rawValue }
-    var label: String { self == .pocket ? "Pocket TTS" : "macOS Voices" }
+    var label: String {
+        switch self {
+        case .pocket: "Pocket TTS"
+        case .lfm3: "LFM3-Audio"
+        case .system: "macOS Voices"
+        }
+    }
 }
 
-/// Reads Claude's replies aloud, on-device: Kyutai's Pocket TTS by default, or the macOS voices.
+/// Reads Claude's replies aloud, on-device: Kyutai's Pocket TTS by default, LFM3-Audio, or the macOS voices.
 @Observable
 final class Speaker: NSObject {
     static let shared = Speaker()
@@ -40,6 +46,7 @@ final class Speaker: NSObject {
         let engine = SpeechEngine(rawValue: UserDefaults.standard.string(forKey: Pref.speechEngine) ?? "") ?? .pocket
         switch engine {
         case .pocket: speakWithPocket(text)
+        case .lfm3: speakWithLFM3(text)
         case .system: speakWithSystem(text)
         }
     }
@@ -60,19 +67,36 @@ final class Speaker: NSObject {
         synthesizer.speak(utterance)
     }
 
-    /// Generates sentence by sentence and plays each as soon as it's ready, while the next one generates.
     private func speakWithPocket(_ text: String) {
         let voice = UserDefaults.standard.string(forKey: Pref.pocketVoice) ?? PocketVoice.voices[0]
+        speakGenerated(text, load: { try await PocketVoice.shared.load() }) {
+            try await PocketVoice.shared.synthesize($0, voice: voice)
+        }
+    }
+
+    private func speakWithLFM3(_ text: String) {
+        let voice = UserDefaults.standard.string(forKey: Pref.lfm3Voice) ?? LFM3Audio.voices[0]
+        let language = UserDefaults.standard.string(forKey: Pref.lfm3Language) ?? "en"
+        speakGenerated(text, load: {
+            try await LFM3Audio.shared.prepare()
+            return LFM3Audio.outputSampleRate
+        }) {
+            try await LFM3Audio.shared.synthesize($0, voice: voice, language: language)
+        }
+    }
+
+    /// Generates sentence by sentence and plays each as soon as it's ready, while the next one generates.
+    private func speakGenerated(_ text: String, load: @escaping () async throws -> Int, synthesize: @escaping (String) async throws -> [Float]) {
         let speed = Float(UserDefaults.standard.object(forKey: Pref.speechRate) as? Double ?? 0.5) * 2
         let chunks = Self.chunks(of: text)
         isPreparing = true
         task = Task {
             do {
-                let sampleRate = try await PocketVoice.shared.load()
+                let sampleRate = try await load()
                 try Task.checkCancellation()
                 try audio.start(sampleRate: sampleRate, speed: speed) { self.finished() }
                 for chunk in chunks {
-                    let samples = try await PocketVoice.shared.synthesize(chunk, voice: voice)
+                    let samples = try await synthesize(chunk)
                     try Task.checkCancellation()
                     audio.enqueue(samples)
                     isPreparing = false
